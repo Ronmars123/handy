@@ -12,66 +12,15 @@ class BookedUsersPage extends StatefulWidget {
 class _BookedUsersPageState extends State<BookedUsersPage> {
   final DatabaseReference _dbRef = FirebaseDatabase.instance.ref();
   bool _isLoading = true; // Loading indicator
+  bool _showCompleted = false; // Track if we're showing completed jobs
   List<Map<String, dynamic>> _bookedUsers = []; // List to store booked users
+  List<Map<String, dynamic>> _completedJobs =
+      []; // List to store completed jobs
 
   @override
   void initState() {
     super.initState();
     _fetchBookedUsers();
-  }
-
-  Future<void> _fetchBookedUsers() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-
-      if (user == null) {
-        throw Exception('User not logged in.');
-      }
-
-      // Fetch booked users under 'userprofiles/{providerId}/bookedUsers'
-      final snapshot = await _dbRef
-          .child('userprofiles')
-          .child(user.uid)
-          .child('bookedUsers')
-          .get();
-
-      if (snapshot.exists) {
-        final data = snapshot.value as Map<dynamic, dynamic>;
-
-        setState(() {
-          _bookedUsers = data.entries.map((entry) {
-            final value = Map<String, dynamic>.from(entry.value as Map);
-
-            return {
-              'userID': entry.key, // Include the userID
-              'fullName': value['fullName'] ?? 'No Full Name',
-              'email': value['userEmail'] ?? 'No Email',
-              'name': value['name'] ?? 'No Name',
-              'address': value['address'] ?? 'No Address',
-              'contactNumber': value['contactNumber'] ?? 'No Contact Number',
-              'selected_schedule': value['selected_schedule'] ?? 'No Schedule',
-              'status': value['status'] ?? '',
-            };
-          }).toList();
-        });
-      } else {
-        setState(() {
-          _bookedUsers = [];
-        });
-      }
-    } catch (e) {
-      print('Error fetching booked users: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error fetching booked users: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
   }
 
   void _processBooking(Map<String, dynamic> booking) async {
@@ -185,45 +134,174 @@ class _BookedUsersPageState extends State<BookedUsersPage> {
     }
   }
 
+  Future<void> _fetchBookedUsers() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user == null) {
+        throw Exception('User not logged in.');
+      }
+
+      // Fetch booked users under 'userprofiles/{providerId}/bookedUsers'
+      final snapshot = await _dbRef
+          .child('userprofiles')
+          .child(user.uid)
+          .child('bookedUsers')
+          .get();
+
+      if (snapshot.exists) {
+        final data = snapshot.value as Map<dynamic, dynamic>;
+
+        setState(() {
+          _bookedUsers = data.entries.map((entry) {
+            final value = Map<String, dynamic>.from(entry.value as Map);
+
+            return {
+              'userID': entry.key, // Include the userID
+              'fullName': value['fullName'] ?? 'No Full Name',
+              'email': value['userEmail'] ?? 'No Email',
+              'name': value['name'] ?? 'No Name',
+              'address': value['address'] ?? 'No Address',
+              'contactNumber': value['contactNumber'] ?? 'No Contact Number',
+              'selected_schedule': value['selected_schedule'] ?? 'No Schedule',
+              'status': value['status'] ?? '',
+            };
+          }).toList();
+        });
+      } else {
+        setState(() {
+          _bookedUsers = [];
+        });
+      }
+
+      // Fetch completed jobs under 'userprofiles/{providerId}/job_completed'
+      final completedSnapshot = await _dbRef
+          .child('userprofiles')
+          .child(user.uid)
+          .child('job_completed')
+          .get();
+
+      if (completedSnapshot.exists) {
+        final data = completedSnapshot.value as Map<dynamic, dynamic>;
+
+        setState(() {
+          _completedJobs = data.entries.map((entry) {
+            final value = Map<String, dynamic>.from(entry.value as Map);
+
+            return {
+              'fullName': value['fullName'] ?? 'No Full Name',
+              'address': value['address'] ?? 'No Address',
+              'contactNumber': value['contactNumber'] ?? 'No Contact Number',
+              'email': value['userEmail'] ?? 'No Email',
+              'status': value['status'] ?? '',
+            };
+          }).toList();
+        });
+      } else {
+        setState(() {
+          _completedJobs = [];
+        });
+      }
+    } catch (e) {
+      print('Error fetching booked users: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error fetching booked users: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              '',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.blueAccent,
-              ),
-            ),
-          ),
-          Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(),
-                  )
-                : _bookedUsers.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No users have booked yet.',
-                          style: TextStyle(fontSize: 16, color: Colors.grey),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(8.0),
-                        itemCount: _bookedUsers.length,
-                        itemBuilder: (context, index) {
-                          final user = _bookedUsers[index];
-                          return _buildBookedUserCard(user);
-                        },
-                      ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(""),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.check_circle),
+            tooltip: 'Completed',
+            onPressed: () {
+              setState(() {
+                _showCompleted = !_showCompleted; // Toggle between views
+              });
+            },
           ),
         ],
+      ),
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _showCompleted
+                ? const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Text(
+                      'Completed Jobs',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                  )
+                : const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Text(
+                      'Booked Users',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueAccent,
+                      ),
+                    ),
+                  ),
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(),
+                    )
+                  : _showCompleted
+                      ? _completedJobs.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'No completed jobs yet.',
+                                style:
+                                    TextStyle(fontSize: 16, color: Colors.grey),
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(8.0),
+                              itemCount: _completedJobs.length,
+                              itemBuilder: (context, index) {
+                                final job = _completedJobs[index];
+                                return _buildCompletedJobCard(job);
+                              },
+                            )
+                      : _bookedUsers.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'No users have booked yet.',
+                                style:
+                                    TextStyle(fontSize: 16, color: Colors.grey),
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(8.0),
+                              itemCount: _bookedUsers.length,
+                              itemBuilder: (context, index) {
+                                final user = _bookedUsers[index];
+                                return _buildBookedUserCard(user);
+                              },
+                            ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -250,7 +328,11 @@ class _BookedUsersPageState extends State<BookedUsersPage> {
         : isOngoingOrProcess
             ? Colors.blue
             : Colors.green;
-    String buttonText = isOngoingOrProcess ? 'Ongoing' : 'Process';
+    String buttonText = isCompleted
+        ? 'Completed'
+        : isOngoingOrProcess
+            ? 'Ongoing'
+            : 'Process';
     bool isButtonDisabled = isOngoingOrProcess || isCompleted;
 
     return Card(
@@ -353,28 +435,100 @@ class _BookedUsersPageState extends State<BookedUsersPage> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                if (!isCompleted)
-                  ElevatedButton(
-                    onPressed: isButtonDisabled
-                        ? null
-                        : () {
-                            _processBooking(user);
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          isButtonDisabled ? Colors.grey : Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: Text(
-                      buttonText,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                ElevatedButton(
+                  onPressed: isButtonDisabled
+                      ? null
+                      : () {
+                          _processBooking(user);
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isCompleted
+                        ? Colors.grey
+                        : isButtonDisabled
+                            ? Colors.grey
+                            : Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
+                  child: Text(
+                    buttonText,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompletedJobCard(Map<String, dynamic> job) {
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.green[50],
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.grey,
+              blurRadius: 3,
+              offset: Offset(2, 2),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              job['fullName'] ?? 'No Full Name',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.location_on, color: Colors.green, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  job['address'] ?? 'No Address',
+                  style: const TextStyle(color: Colors.black54),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.phone, color: Colors.green, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  job['contactNumber'] ?? 'No Contact Number',
+                  style: const TextStyle(color: Colors.black54),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.email, color: Colors.green, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  job['email'] ?? 'No Email',
+                  style: const TextStyle(color: Colors.black54),
+                ),
               ],
             ),
           ],
