@@ -415,19 +415,15 @@ class _BookedPageState extends State<BookedPage> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              if (!job['isCompleted'])
+                              if (jobStatus == 'Ongoing')
                                 Flexible(
                                   child: ElevatedButton.icon(
                                     onPressed: () async {
-                                      final jobId =
-                                          job['jobId'] ?? ''; // Get the jobId
-                                      final providerId =
-                                          job['providerId'] ?? '';
-                                      await _markJobAsCompleted(
-                                          jobId, providerId, bookedJobs, index);
+                                      final jobId = job['jobId'] ?? ''; // Get the jobId
+                                      final providerId = job['providerId'] ?? '';
+                                      await _markJobAsCompleted(jobId, providerId, bookedJobs, index);
                                     },
-                                    icon:
-                                        const Icon(Icons.check_circle_outline),
+                                    icon: const Icon(Icons.check_circle_outline),
                                     label: const Text('Mark Completed'),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.green,
@@ -440,16 +436,14 @@ class _BookedPageState extends State<BookedPage> {
                                 child: ElevatedButton.icon(
                                   onPressed: job['isCompleted']
                                       ? () {
-                                          _showFeedbackDialog(
-                                              context, job['providerId'] ?? '');
+                                          _showFeedbackDialog(context, job['providerId'] ?? '');
                                         }
                                       : null,
                                   icon: const Icon(Icons.rate_review),
                                   label: const Text('Review & Feedback'),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: job['isCompleted']
-                                        ? Colors.blueAccent
-                                        : Colors.grey,
+                                    backgroundColor:
+                                        job['isCompleted'] ? Colors.blueAccent : Colors.grey,
                                     foregroundColor: Colors.white,
                                   ),
                                 ),

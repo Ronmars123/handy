@@ -29,6 +29,7 @@ class _ChatPagesState extends State<ChatPages> {
       FirebaseDatabase.instance.ref('messages');
 
   List<Map<dynamic, dynamic>> _messages = [];
+  int _unseenMessagesCount = 0;
 
   @override
   void initState() {
@@ -36,14 +37,12 @@ class _ChatPagesState extends State<ChatPages> {
     _listenForMessages();
   }
 
-  // Generate a unique chat room ID based on sender and receiver IDs
   String getChatRoomId() {
     List<String> ids = [widget.currentUserId, widget.receiverId];
-    ids.sort(); // Ensures the ID is consistent regardless of sender/receiver order
+    ids.sort();
     return ids.join('_');
   }
 
-  // Listen for messages in the specific chat room
   void _listenForMessages() {
     String chatRoomId = getChatRoomId();
 
@@ -52,24 +51,35 @@ class _ChatPagesState extends State<ChatPages> {
       if (data != null && data is Map) {
         List<Map<dynamic, dynamic>> tempMessages = [];
 
+        int unseenCount = 0;
+
         data.forEach((key, value) {
           if (value is Map) {
-            tempMessages.add(Map<dynamic, dynamic>.from(value));
+            final message = Map<dynamic, dynamic>.from(value);
+            message['key'] = key;
+
+            if (message['receiverID'] == widget.currentUserId &&
+                !(message['seen'] ?? false)) {
+              unseenCount++;
+            }
+
+            tempMessages.add(message);
           }
         });
 
         setState(() {
           _messages = tempMessages;
           _messages.sort((a, b) => (a['timestamp'] ?? 0)
-              .compareTo(b['timestamp'] ?? 0)); // Sort messages by timestamp
+              .compareTo(b['timestamp'] ?? 0));
+          _unseenMessagesCount = unseenCount;
         });
 
         _scrollToBottom();
+        _markMessagesAsSeen();
       }
     });
   }
 
-  // Send a text message
   void _sendMessage() {
     if (_controller.text.trim().isNotEmpty) {
       String chatRoomId = getChatRoomId();
@@ -80,6 +90,7 @@ class _ChatPagesState extends State<ChatPages> {
         'message': _controller.text.trim(),
         'timestamp': DateTime.now().millisecondsSinceEpoch,
         'type': 'text',
+        'seen': false,
       };
 
       _messagesRef.child(chatRoomId).push().set(newMessage);
@@ -88,7 +99,6 @@ class _ChatPagesState extends State<ChatPages> {
     }
   }
 
-  // Send an image
   Future<void> _sendImage() async {
     final XFile? pickedFile =
         await _picker.pickImage(source: ImageSource.gallery);
@@ -96,7 +106,6 @@ class _ChatPagesState extends State<ChatPages> {
       File imageFile = File(pickedFile.path);
       String chatRoomId = getChatRoomId();
 
-      // Upload to Firebase Storage
       final String fileName = DateTime.now().millisecondsSinceEpoch.toString();
       final Reference storageRef =
           FirebaseStorage.instance.ref().child('chat_images').child(fileName);
@@ -104,13 +113,13 @@ class _ChatPagesState extends State<ChatPages> {
       await storageRef.putFile(imageFile);
       final String downloadUrl = await storageRef.getDownloadURL();
 
-      // Save image URL to the database
       final newMessage = {
         'senderID': widget.currentUserId,
         'receiverID': widget.receiverId,
         'message': downloadUrl,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
         'type': 'image',
+        'seen': false,
       };
 
       _messagesRef.child(chatRoomId).push().set(newMessage);
@@ -118,70 +127,192 @@ class _ChatPagesState extends State<ChatPages> {
     }
   }
 
-  // Scroll the chat to the bottom
   void _scrollToBottom() {
-    Future.delayed(Duration(milliseconds: 100), () {
+    Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
       }
     });
   }
 
+  void _markMessagesAsSeen() {
+    String chatRoomId = getChatRoomId();
+
+    for (var message in _messages) {
+      if (message['receiverID'] == widget.currentUserId &&
+          !(message['seen'] ?? false)) {
+        final messageKey = message['key'];
+        if (messageKey != null) {
+          _messagesRef
+              .child(chatRoomId)
+              .child(messageKey)
+              .update({'seen': true});
+        }
+      }
+    }
+  }
+
+  // Delete a specific message
+  void _deleteMessage(String messageKey) {
+    String chatRoomId = getChatRoomId();
+    _messagesRef.child(chatRoomId).child(messageKey).remove();
+  }
+
+  // Delete all messages sent by the current user
+  void _clearAllSentMessages() {
+    String chatRoomId = getChatRoomId();
+    for (var message in _messages) {
+      if (message['senderID'] == widget.currentUserId) {
+        final messageKey = message['key'];
+        if (messageKey != null) {
+          _messagesRef.child(chatRoomId).child(messageKey).remove();
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Chat with ${widget.receiverName}'),
+        iconTheme: const IconThemeData(
+          color: Colors.white,
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Chat with ${widget.receiverName}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              'Unseen Messages: $_unseenMessagesCount',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Colors.white70,
+              ),
+            ),
+          ],
+        ),
         backgroundColor: Colors.blueAccent,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete, color: Colors.white),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Clear All Messages'),
+                  content: const Text(
+                      'Are you sure you want to clear all messages you sent?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        _clearAllSentMessages();
+                        Navigator.pop(context);
+                      },
+                      child: const Text(
+                        'Clear',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
-              padding: EdgeInsets.all(8),
+              padding: const EdgeInsets.all(8),
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final message = _messages[index];
                 final isSentByMe = message['senderID'] == widget.currentUserId;
                 final messageType = message['type'] ?? 'text';
 
-                return Align(
-                  alignment:
-                      isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: EdgeInsets.symmetric(vertical: 4),
-                    padding: EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: isSentByMe ? Colors.blueAccent : Colors.grey[300],
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(12),
-                        topRight: Radius.circular(12),
-                        bottomLeft: isSentByMe
-                            ? Radius.circular(12)
-                            : Radius.circular(0),
-                        bottomRight: isSentByMe
-                            ? Radius.circular(0)
-                            : Radius.circular(12),
-                      ),
-                    ),
-                    child: messageType == 'image'
-                        ? Image.network(
-                            message['message'],
-                            width: 200,
-                            height: 200,
-                            fit: BoxFit.cover,
-                          )
-                        : Text(
-                            message['message'] ?? '',
-                            style: TextStyle(
-                              color: isSentByMe ? Colors.white : Colors.black87,
+                return GestureDetector(
+                  onLongPress: isSentByMe
+                      ? () {
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Delete Message'),
+                              content: const Text(
+                                  'Are you sure you want to delete this message?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    _deleteMessage(message['key']);
+                                    Navigator.pop(context);
+                                  },
+                                  child: const Text(
+                                    'Delete',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
+                          );
+                        }
+                      : null,
+                  child: Align(
+                    alignment: isSentByMe
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color:
+                            isSentByMe ? Colors.blueAccent : Colors.grey[300],
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(12),
+                          topRight: const Radius.circular(12),
+                          bottomLeft: isSentByMe
+                              ? const Radius.circular(12)
+                              : const Radius.circular(0),
+                          bottomRight: isSentByMe
+                              ? const Radius.circular(0)
+                              : const Radius.circular(12),
+                        ),
+                      ),
+                      child: messageType == 'image'
+                          ? Image.network(
+                              message['message'],
+                              width: 200,
+                              height: 200,
+                              fit: BoxFit.cover,
+                            )
+                          : Text(
+                              message['message'] ?? '',
+                              style: TextStyle(
+                                color: isSentByMe
+                                    ? Colors.white
+                                    : Colors.black87,
+                              ),
+                            ),
+                    ),
                   ),
                 );
               },
@@ -192,8 +323,8 @@ class _ChatPagesState extends State<ChatPages> {
             child: Row(
               children: [
                 IconButton(
-                  icon: Icon(Icons.image, color: Colors.blueAccent),
-                  onPressed: _sendImage, // Pick and send image
+                  icon: const Icon(Icons.image, color: Colors.blueAccent),
+                  onPressed: _sendImage,
                 ),
                 Expanded(
                   child: TextField(
@@ -207,12 +338,12 @@ class _ChatPagesState extends State<ChatPages> {
                     onSubmitted: (value) => _sendMessage(),
                   ),
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 FloatingActionButton(
                   onPressed: _sendMessage,
                   backgroundColor: Colors.blueAccent,
-                  child: Icon(Icons.send, color: Colors.white),
                   mini: true,
+                  child: const Icon(Icons.send, color: Colors.white),
                 ),
               ],
             ),

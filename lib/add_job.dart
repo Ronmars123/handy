@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 
 class AddJobPage extends StatefulWidget {
+  const AddJobPage({super.key});
+
   @override
   _AddJobPageState createState() => _AddJobPageState();
 }
@@ -97,7 +99,7 @@ class _AddJobPageState extends State<AddJobPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              'Job added successfully! ${isSubscriptionActive ? "Activated" : "Pending Activation"}'),
+              'Job added successfully! $isSubscriptionActive '),
         ),
       );
 

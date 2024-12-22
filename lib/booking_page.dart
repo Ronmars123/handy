@@ -307,165 +307,185 @@ class _BookedUsersPageState extends State<BookedUsersPage> {
   }
 
   Widget _buildBookedUserCard(Map<String, dynamic> user) {
-    String formattedSchedule = 'No Schedule';
-    if (user['selected_schedule'] != null &&
-        user['selected_schedule'].isNotEmpty) {
-      try {
-        final DateTime date = DateTime.parse(user['selected_schedule']);
-        formattedSchedule =
-            '${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}-${date.year}';
-      } catch (e) {
-        print('Error parsing date: $e');
-      }
+  String formattedSchedule = 'No Schedule';
+  if (user['selected_schedule'] != null && user['selected_schedule'].isNotEmpty) {
+    try {
+      final DateTime date = DateTime.parse(user['selected_schedule']);
+      formattedSchedule =
+          '${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}-${date.year}';
+    } catch (e) {
+      print('Error parsing date: $e');
     }
+  }
 
-    String status = user['status']?.toString().trim().toLowerCase() ?? '';
-    bool isCompleted = status == 'completed';
-    bool isOngoingOrProcess = status == 'ongoing' || status == 'process';
+  String status = user['status']?.toString().trim().toLowerCase() ?? '';
+  bool isCompleted = status == 'completed';
+  bool isOngoingOrProcess = status == 'ongoing' || status == 'process';
 
-    Color statusColor = isCompleted
-        ? Colors.grey
-        : isOngoingOrProcess
-            ? Colors.blue
-            : Colors.green;
-    String buttonText = isCompleted
-        ? 'Completed'
-        : isOngoingOrProcess
-            ? 'Ongoing'
-            : 'Process';
-    bool isButtonDisabled = isOngoingOrProcess || isCompleted;
+  Color statusColor = isCompleted
+      ? Colors.grey
+      : isOngoingOrProcess
+          ? Colors.blue
+          : Colors.green;
+  String buttonText = isCompleted
+      ? 'Completed'
+      : isOngoingOrProcess
+          ? 'Ongoing'
+          : 'Process';
+  bool isButtonDisabled = isOngoingOrProcess || isCompleted;
 
-    return Card(
-      elevation: 4,
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFE3F2FD), Color(0xFFBBDEFB)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.grey,
-              blurRadius: 3,
-              offset: Offset(2, 2),
-            ),
-          ],
+  return Card(
+    elevation: 4,
+    margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFE3F2FD), Color(0xFFBBDEFB)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              user['fullName'] ?? 'No Full Name',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.grey,
+            blurRadius: 3,
+            offset: Offset(2, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            user['fullName'] ?? 'No Full Name',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
             ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
                   children: [
                     const Icon(Icons.email, color: Colors.blueAccent, size: 18),
                     const SizedBox(width: 6),
-                    Text(
-                      user['email'] ?? 'No Email',
-                      style: const TextStyle(color: Colors.black54),
+                    Flexible(
+                      child: Text(
+                        user['email'] ?? 'No Email',
+                        style: const TextStyle(color: Colors.black54),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
-                Row(
+              ),
+              Expanded(
+                child: Row(
                   children: [
                     const Icon(Icons.phone, color: Colors.blueAccent, size: 18),
                     const SizedBox(width: 6),
-                    Text(
-                      user['contactNumber'] ?? 'No Contact Number',
-                      style: const TextStyle(color: Colors.black54),
+                    Flexible(
+                      child: Text(
+                        user['contactNumber'] ?? 'No Contact Number',
+                        style: const TextStyle(color: Colors.black54),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
                   children: [
                     const Icon(Icons.calendar_today,
                         color: Colors.blueAccent, size: 18),
                     const SizedBox(width: 6),
-                    Text(
-                      formattedSchedule,
-                      style: const TextStyle(color: Colors.black54),
+                    Flexible(
+                      child: Text(
+                        formattedSchedule,
+                        style: const TextStyle(color: Colors.black54),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
-                Row(
+              ),
+              Expanded(
+                child: Row(
                   children: [
                     const Icon(Icons.location_on,
                         color: Colors.blueAccent, size: 18),
                     const SizedBox(width: 6),
-                    Text(
-                      user['address'] ?? 'No Address',
-                      style: const TextStyle(color: Colors.black54),
+                    Flexible(
+                      child: Text(
+                        user['address'] ?? 'No Address',
+                        style: const TextStyle(color: Colors.black54),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  status.capitalize(),
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                status.capitalize(),
+                style: TextStyle(
+                  color: statusColor,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              ElevatedButton(
+                onPressed: isButtonDisabled
+                    ? null
+                    : () {
+                        _processBooking(user);
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isCompleted
+                      ? Colors.grey
+                      : isButtonDisabled
+                          ? Colors.grey
+                          : Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                ElevatedButton(
-                  onPressed: isButtonDisabled
-                      ? null
-                      : () {
-                          _processBooking(user);
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isCompleted
-                        ? Colors.grey
-                        : isButtonDisabled
-                            ? Colors.grey
-                            : Colors.green,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: Text(
-                    buttonText,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                child: Text(
+                  buttonText,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
+
 
   Widget _buildCompletedJobCard(Map<String, dynamic> job) {
     return Card(

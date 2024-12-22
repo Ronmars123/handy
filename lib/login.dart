@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:handycrew/edit_profile.dart';
 import 'provider_homepage.dart';
 import 'user_homepage.dart';
 import 'admin_homepage.dart'; // Import AdminHomePage
 
 class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
   @override
   _LoginPageState createState() => _LoginPageState();
 }
@@ -15,77 +18,306 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
+  DateTime? lastResendTime;
 
-  Future<void> _login() async {
-    setState(() {
-      _isLoading = true;
-    });
+ Future<void> _login() async {
+  // Validate email and password fields
+  if (_emailController.text.trim().isEmpty ||
+      _passwordController.text.trim().isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please enter your email and password.'),
+        backgroundColor: Colors.red,
+      ),
+    );
+    return;
+  }
 
-    try {
-      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
+  setState(() {
+    _isLoading = true;
+  });
 
-      final userUid = userCredential.user?.uid;
+  try {
+    // Log in the user
+    UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+      email: _emailController.text.trim(),
+      password: _passwordController.text.trim(),
+    );
 
-      // Fetch userType and disable status from Realtime Database
-      DatabaseReference userRef =
-          FirebaseDatabase.instance.ref('userprofiles/$userUid');
-      final snapshot = await userRef.get();
+    // Get the current user after login
+    final user = userCredential.user;
 
-      if (snapshot.exists) {
-        final data = snapshot.value as Map;
-        final userType = data['userType'];
-        final isDisabled = data['disable'] ?? false;
+    if (user == null) {
+      throw Exception('Failed to retrieve the user.');
+    }
 
-        if (isDisabled) {
-          // User is banned
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Your account has been banned.'),
-              backgroundColor: Colors.red,
-            ),
-          );
+    // Check if email is verified
+    if (!user.emailVerified) {
+      // Email is not verified, show the verification dialog
+      _showEmailVerificationDialog(user);
+      return;
+    }
 
-          await _auth.signOut(); // Log out the banned user
-          return;
-        }
+    // If email is verified, fetch user details from Realtime Database
+    final userUid = user.uid;
 
-        if (userType == 'User') {
+    DatabaseReference userRef =
+        FirebaseDatabase.instance.ref('userprofiles/$userUid');
+    final snapshot = await userRef.get();
+
+    if (snapshot.exists) {
+      final data = snapshot.value as Map?;
+      final userType = data?['userType'] ?? 'Unknown';
+      final isDisabled = data?['disable'] ?? false;
+      final isProfileSetup = data?['profile_setup'] ?? false;
+
+      if (isDisabled) {
+        // User is banned
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Your account has been banned.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+
+        await _auth.signOut(); // Log out the banned user
+        return;
+      }
+
+      // Check if profile_setup is false and navigate to EditProfilePage
+      if (!isProfileSetup) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EditProfilePage(user: user),
+          ),
+        );
+        return; // Exit the function to avoid navigating to other pages
+      }
+
+      // Navigate based on userType
+      switch (userType) {
+        case 'User':
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => UserHomePage()),
           );
-        } else if (userType == 'Provider') {
+          break;
+        case 'Provider':
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => ProviderHomePage()),
           );
-        } else if (userType == 'Admin') {
+          break;
+        case 'Admin':
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => AdminHomePage()),
           );
-        } else {
+          break;
+        default:
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Unsupported user type: $userType')),
           );
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('User data not found')),
-        );
       }
-    } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message ?? 'Login failed')));
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('User data not found in the database.')),
+      );
     }
+  } on FirebaseAuthException catch (e) {
+    // Handle specific login errors
+    if (e.code == 'user-not-found') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No user found for this email address.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } else if (e.code == 'wrong-password') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Incorrect password. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } else if (e.code == 'invalid-email') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The email address is invalid.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } else {
+      // General error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message ?? 'Login failed.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  } finally {
+    setState(() {
+      _isLoading = false;
+    });
   }
+}
+
+
+
+void _resendVerificationEmail(User user) async {
+  final now = DateTime.now();
+
+  // Check if the user is requesting too soon
+  if (lastResendTime != null &&
+      now.difference(lastResendTime!).inSeconds < 60) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Please wait before requesting another verification email.',
+        ),
+        backgroundColor: Colors.orange,
+      ),
+    );
+    return;
+  }
+
+  try {
+    if (user != null) {
+      await user.sendEmailVerification();
+      lastResendTime = now; // Update last resend time
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'A new verification email has been sent. Please check your inbox.',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      throw Exception('User object is null.');
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Failed to send verification email. Please try again later. Error: ${e.toString()}',
+        ),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+}
+
+void _showEmailVerificationDialog(User user) {
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12), // Rounded corners
+      ),
+      title: Row(
+        children: [
+          const Icon(Icons.email_outlined, color: Colors.blueAccent, size: 28),
+          const SizedBox(width: 8),
+          const Text(
+            'Email Not Verified',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.blueAccent,
+            ),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Your email address is not verified. Please check your inbox and verify your email to continue.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16, color: Colors.black87),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Icon(Icons.check_circle, color: Colors.green, size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Check your inbox',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ],
+      ),
+      actionsAlignment: MainAxisAlignment.center, // Center actions
+      actions: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center, // Align buttons horizontally
+          children: [
+            ElevatedButton.icon(
+              onPressed: () async {
+                try {
+                  await user.sendEmailVerification(); // Send verification email
+                  Navigator.pop(context); // Close the dialog
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'A new verification email has been sent. Please check your inbox.',
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Failed to send verification email. Please try again later.',
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text(
+                'Resend Email',
+                style: TextStyle(fontSize: 14),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12), // Smaller space between buttons
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close the dialog
+              },
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  fontSize: 14, // Smaller font size
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -116,11 +348,11 @@ class _LoginPageState extends State<LoginPage> {
                           vertical: 24, horizontal: 16),
                       child: Column(
                         children: [
-                          // Logo inside the card
+                          // Enlarged logo inside the card
                           Image.asset(
                             'img/logosss.png',
-                            height: 120,
-                            width: 120,
+                            height: 160, // Increased height
+                            width: 160, // Increased width
                           ),
                           const SizedBox(
                               height: 24), // Spacing between logo and inputs
@@ -158,11 +390,14 @@ class _LoginPageState extends State<LoginPage> {
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    backgroundColor: Colors.blueAccent,
+                                    backgroundColor: const Color.fromARGB(
+                                        255, 10, 161, 255), // Blue button color
                                   ),
                                   child: const Text(
                                     'Login',
-                                    style: TextStyle(fontSize: 16),
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.white), // White text
                                   ),
                                 ),
                         ],

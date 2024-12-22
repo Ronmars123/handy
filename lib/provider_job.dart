@@ -7,7 +7,7 @@ class ProviderJobsPage extends StatefulWidget {
   final String providerName;
   final Map<String, dynamic> selectedJob;
 
-  ProviderJobsPage({
+  const ProviderJobsPage({super.key, 
     required this.providerId,
     required this.providerName,
     required this.selectedJob,
@@ -67,88 +67,139 @@ class _ProviderJobsPageState extends State<ProviderJobsPage> {
   }
 
   void _reportUser() async {
-    final user = FirebaseAuth.instance.currentUser;
+  final user = FirebaseAuth.instance.currentUser;
 
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('You need to log in to report a user.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    final TextEditingController reportController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Report User'),
-          content: TextField(
-            controller: reportController,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Reason for Reporting',
-              hintText: 'Describe the issue...',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () async {
-                final reason = reportController.text.trim();
-
-                if (reason.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Report reason cannot be empty.'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-
-                try {
-                  final reportData = {
-                    'providerId': widget.providerId,
-                    'providerName': widget.providerName,
-                    'reportedBy': user.uid,
-                    'reason': reason,
-                    'timestamp': DateTime.now().toIso8601String(),
-                  };
-
-                  await _dbRef.child('reports').push().set(reportData);
-
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Report submitted successfully.'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                } catch (e) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to submit report: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              },
-              child: const Text('Submit'),
-            ),
-          ],
-        );
-      },
+  if (user == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('You need to log in to report a user.'),
+        backgroundColor: Colors.red,
+      ),
     );
+    return;
   }
+
+  String? selectedReportType;
+  final List<String> reportTypes = ['Scam', 'Harrasment','Speech Harrasment'];
+  final TextEditingController descriptionController = TextEditingController();
+
+  showDialog(
+    context: context,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Report User'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Dropdown for selecting report type
+                DropdownButtonFormField<String>(
+                  value: selectedReportType,
+                  items: reportTypes.map((type) {
+                    return DropdownMenuItem(
+                      value: type,
+                      child: Text(type),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      selectedReportType = value;
+                    });
+                  },
+                  decoration: const InputDecoration(
+                    labelText: 'Select Report Type',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Description field for detailed report
+                TextField(
+                  controller: descriptionController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    hintText: 'Provide additional details...',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  // Validate inputs
+                  if (selectedReportType == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please select a report type.'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+
+                  if (selectedReportType == 'Other' &&
+                      descriptionController.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Description cannot be empty for "Other" report type.'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+
+                  final description = descriptionController.text.trim();
+
+                  try {
+                    final reportData = {
+                      'providerId': widget.providerId,
+                      'providerName': widget.providerName,
+                      'reportedBy': user.uid,
+                      'reportType': selectedReportType,
+                      'description': description,
+                      'timestamp': DateTime.now().toIso8601String(),
+                    };
+
+                    await FirebaseDatabase.instance
+                        .ref('reports')
+                        .push()
+                        .set(reportData);
+
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Report submitted successfully.'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } catch (e) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to submit report: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                },
+                child: const Text('Submit'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
 
   void _bookJob(DateTime selectedDate) async {
     final user = FirebaseAuth.instance.currentUser;
@@ -356,7 +407,7 @@ class _ProviderJobsPageState extends State<ProviderJobsPage> {
       return;
     }
 
-    final feedbackList = (feedbackData as Map<dynamic, dynamic>)
+    final feedbackList = (feedbackData)
         .entries
         .map((entry) => Map<String, dynamic>.from(entry.value as Map))
         .toList();
@@ -424,7 +475,7 @@ class _ProviderJobsPageState extends State<ProviderJobsPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: ListTile(
-        leading: Icon(
+        leading: const Icon(
           Icons.info,
           color: Colors.blueAccent,
         ),
@@ -448,99 +499,108 @@ class _ProviderJobsPageState extends State<ProviderJobsPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final job = widget.selectedJob;
+ Widget build(BuildContext context) {
+  final job = widget.selectedJob;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('${widget.providerName} - Job Details'),
-        backgroundColor: Colors.blueAccent,
-        centerTitle: true,
+  return Scaffold(
+    appBar: AppBar(
+      title: Text(
+        '${widget.providerName} - Job Details',
+        style: const TextStyle(
+          color: Colors.white, // Make the app bar title text color white
+        ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Card(
-          elevation: 4,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  job['jobTitle'] ?? 'No Title',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blueAccent,
-                  ),
+      backgroundColor: Colors.blueAccent,
+      centerTitle: true,
+      iconTheme: const IconThemeData(
+        color: Colors.white, // Make the back icon color white
+      ),
+    ),
+    body: Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                job['jobTitle'] ?? 'No Title',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blueAccent,
                 ),
-                const Divider(),
-                _buildDetailRow('Provider:', widget.providerName),
-                _buildDetailRow('Experience:', job['experience'] ?? 'N/A'),
-                _buildDetailRow('Expertise:', job['expertise'] ?? 'N/A'),
-                const SizedBox(height: 20),
-                Center(
-                  child: ElevatedButton.icon(
-                    onPressed: _isBooked ? _cancelBooking : _pickDateAndBookJob,
-                    icon: Icon(
-                      _isBooked ? Icons.cancel : Icons.calendar_today,
-                    ),
-                    label: Text(_isBooked ? 'Cancel Booking' : 'Book Now'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _isBooked ? Colors.red : Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
+              ),
+              const Divider(),
+              _buildDetailRow('Provider:', widget.providerName),
+              _buildDetailRow('Experience:', job['experience'] ?? 'N/A'),
+              _buildDetailRow('Expertise:', job['expertise'] ?? 'N/A'),
+              const SizedBox(height: 20),
+              Center(
+                child: ElevatedButton.icon(
+                  onPressed: _isBooked ? _cancelBooking : _pickDateAndBookJob,
+                  icon: Icon(
+                    _isBooked ? Icons.cancel : Icons.calendar_today,
                   ),
-                ),
-                const SizedBox(height: 16),
-                Center(
-                  child: ElevatedButton.icon(
-                    onPressed: _viewProviderProfile,
-                    icon: const Icon(Icons.person),
-                    label: const Text('View Profile'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                  label: Text(_isBooked ? 'Cancel Booking' : 'Book Now'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isBooked ? Colors.red : Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                Center(
-                  child: ElevatedButton.icon(
-                    onPressed: _reportUser,
-                    icon: const Icon(Icons.flag),
-                    label: const Text('Report User'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: ElevatedButton.icon(
+                  onPressed: _viewProviderProfile,
+                  icon: const Icon(Icons.person),
+                  label: const Text('View Profile'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: ElevatedButton.icon(
+                  onPressed: _reportUser,
+                  icon: const Icon(Icons.flag),
+                  label: const Text('Report User'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
+
 
   Widget _buildDetailRow(String label, String value) {
     return Padding(

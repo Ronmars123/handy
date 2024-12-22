@@ -11,6 +11,8 @@ import 'profile_page.dart';
 import 'login.dart';
 
 class ProviderHomePage extends StatefulWidget {
+  const ProviderHomePage({super.key});
+
   @override
   _ProviderHomePageState createState() => _ProviderHomePageState();
 }
@@ -27,7 +29,7 @@ class _ProviderHomePageState extends State<ProviderHomePage> {
   List<Map<String, dynamic>> _users = []; // List to store chat users
   bool _isLoadingJobs = true;
   Map<String, dynamic> _providerProfile = {};
-
+  int _unreadMessageCount = 0; // Counter for unread messages
   int _currentIndex = 0; // Bottom navigation bar index
 
   @override
@@ -36,6 +38,7 @@ class _ProviderHomePageState extends State<ProviderHomePage> {
     _fetchGCashNumber();
     _fetchProviderJobs();
     _fetchProviderProfile();
+    _fetchUnreadMessageCount();
   }
 
   /// Fetch GCash Number
@@ -74,6 +77,38 @@ class _ProviderHomePageState extends State<ProviderHomePage> {
     } catch (e) {
       print('Error fetching provider profile: $e');
     }
+  }
+
+  Future<void> _fetchUnreadMessageCount() async {
+    final String? providerId = _auth.currentUser?.uid;
+
+    if (providerId == null) return;
+
+    _dbRef.child('messages').onValue.listen((event) {
+      if (event.snapshot.exists) {
+        final data = event.snapshot.value as Map<dynamic, dynamic>;
+
+        int unreadCount = 0;
+
+        // Loop through each chat room
+        data.forEach((chatRoomId, messages) {
+          if (messages is Map<dynamic, dynamic>) {
+            messages.forEach((messageId, message) {
+              if (message is Map<dynamic, dynamic>) {
+                // Check if the message is unread and sent to the current provider
+                if (message['receiverID'] == providerId && !(message['seen'] ?? false)) {
+                  unreadCount++;
+                }
+              }
+            });
+          }
+        });
+
+        setState(() {
+          _unreadMessageCount = unreadCount; // Update the unread message count
+        });
+      }
+    });
   }
 
   Future<void> _fetchProviderJobs() async {
@@ -225,7 +260,7 @@ class _ProviderHomePageState extends State<ProviderHomePage> {
     } else {
       // Handle the case where the user is not logged in
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('Error: User not logged in'),
           backgroundColor: Colors.red,
         ),
@@ -234,64 +269,100 @@ class _ProviderHomePageState extends State<ProviderHomePage> {
   }
 
   /// Build Main UI
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.blue[50],
-      appBar: AppBar(
-        title: const Text(
-          'Provider Dashboard',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+    @override
+    Widget build(BuildContext context) {
+      return Scaffold(
+        backgroundColor: Colors.blue[50],
+        appBar: AppBar(
+          title: const Text(
+            'Provider Dashboard',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.white, // Make the title color white
+            ),
+          ),
+          backgroundColor: Colors.blueAccent,
+          actions: [
+            IconButton(
+              icon: const Icon(
+                Icons.account_circle,
+                color: Colors.white, // Make the profile icon color white
+              ),
+              onPressed: _showProfileModal,
+              tooltip: 'Profile',
+            ),
+          ],
         ),
-        backgroundColor: Colors.blueAccent,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.account_circle),
-            onPressed: _showProfileModal,
-            tooltip: 'Profile',
+        body: _buildSelectedScreen(),
+        floatingActionButton: Stack(
+        children: [
+          FloatingActionButton(
+            onPressed: _showChatUsersModal,
+            backgroundColor: Colors.blueAccent,
+            tooltip: 'Chat with a User',
+            child: const Icon(Icons.chat, color: Colors.white),
           ),
+          if (_unreadMessageCount > 0)
+            Positioned(
+              right: 0,
+              top: 0,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                constraints: const BoxConstraints(
+                  minWidth: 20,
+                  minHeight: 20,
+                ),
+                child: Text(
+                  '$_unreadMessageCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
         ],
       ),
-      body: _buildSelectedScreen(),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showChatUsersModal,
-        backgroundColor: Colors.blueAccent,
-        child: const Icon(Icons.chat, color: Colors.white),
-        tooltip: 'Chat with a User',
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        selectedItemColor:
-            Colors.blueAccent, // Text color for the selected item
-        unselectedItemColor:
-            Colors.blue[200], // Text color for unselected items
-        type: BottomNavigationBarType.fixed, // Ensures all items are shown
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.add_circle),
-            label: 'Add Job',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.book_online),
-            label: 'Bookings',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.subscriptions),
-            label: 'Subscriptions',
-          ),
-        ],
-      ),
-    );
-  }
+
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            setState(() {
+              _currentIndex = index;
+            });
+          },
+          selectedItemColor: Colors.blueAccent, // Text color for the selected item
+          unselectedItemColor: Colors.blue[200], // Text color for unselected items
+          type: BottomNavigationBarType.fixed, // Ensures all items are shown
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.add_circle),
+              label: 'Add Job',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.book_online),
+              label: 'Bookings',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.subscriptions),
+              label: 'Subscriptions',
+            ),
+          ],
+        ),
+      );
+    }
+
 
   /// Select screen based on index
   Widget _buildSelectedScreen() {
@@ -310,91 +381,93 @@ class _ProviderHomePageState extends State<ProviderHomePage> {
   }
 
   Widget _buildHomeScreen() {
-    return _isLoadingJobs
-        ? const Center(child: CircularProgressIndicator())
-        : _jobs.isEmpty
-            ? const Center(
-                child: Text(
-                  'No jobs available.',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-              )
-            : ListView.builder(
-                itemCount: _jobs.length,
-                itemBuilder: (context, index) {
-                  final job = _jobs[index];
-                  return Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // Job Details (Left Side)
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  job['title'],
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blueAccent,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Experience: ${job['experience']}',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Expertise: ${job['expertise']}',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.black54,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Edit and Delete Buttons (Right Side)
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
+  return _isLoadingJobs
+      ? const Center(child: CircularProgressIndicator())
+      : _jobs.isEmpty
+          ? const Center(
+              child: Text(
+                'No jobs available.',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+            )
+          : ListView.builder(
+              itemCount: _jobs.length,
+              itemBuilder: (context, index) {
+                final job = _jobs[index];
+                return Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Job Details (Left Side)
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit,
-                                    color: Colors.orange),
-                                onPressed: () {
-                                  _showEditJobDialog(job, index);
-                                },
+                              Text(
+                                job['title'],
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blueAccent,
+                                ),
                               ),
-                              IconButton(
-                                icon:
-                                    const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () {
-                                  _showDeleteConfirmationDialog(job, index);
-                                },
+                              const SizedBox(height: 4),
+                              Text(
+                                'Experience: ${job['experience']}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Expertise: ${job['expertise']}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black54,
+                                ),
                               ),
                             ],
                           ),
-                        ],
-                      ),
+                        ),
+                        // Triple-dot menu for Edit and Delete
+                        PopupMenuButton<String>(
+                          onSelected: (String result) {
+                            if (result == 'Edit') {
+                              _showEditJobDialog(job, index);
+                            } else if (result == 'Delete') {
+                              _showDeleteConfirmationDialog(job, index);
+                            }
+                          },
+                          itemBuilder: (BuildContext context) => [
+                            const PopupMenuItem<String>(
+                              value: 'Edit',
+                              child: Text('Edit'),
+                            ),
+                            const PopupMenuItem<String>(
+                              value: 'Delete',
+                              child: Text('Delete'),
+                            ),
+                          ],
+                          icon: const Icon(Icons.more_vert, color: Colors.black),
+                        ),
+                      ],
                     ),
-                  );
-                },
-              );
-  }
+                  ),
+                );
+              },
+            );
+}
+
 
   void _showEditJobDialog(Map<String, dynamic> job, int index) {
     final TextEditingController jobTitleController =
@@ -800,12 +873,10 @@ class _ProviderHomePageState extends State<ProviderHomePage> {
                             .ref()
                             .child('Gcash-receipts/$uid/$fileName');
 
-                        UploadTask uploadTask =
-                            storageRef.putFile(_receiptImage!);
+                        UploadTask uploadTask = storageRef.putFile(_receiptImage!);
                         TaskSnapshot snapshot = await uploadTask;
 
-                        String downloadUrl =
-                            await snapshot.ref.getDownloadURL();
+                        String downloadUrl = await snapshot.ref.getDownloadURL();
 
                         DatabaseReference receiptRef = FirebaseDatabase.instance
                             .ref('Gcash-receipts')
@@ -827,7 +898,29 @@ class _ProviderHomePageState extends State<ProviderHomePage> {
                           ),
                         );
 
-                        Navigator.pop(dialogContext);
+                        // Show confirmation dialog
+                        showDialog(
+                          context: context,
+                          builder: (BuildContext context) {
+                            return AlertDialog(
+                              title: const Text('Confirmation'),
+                              content: const Text(
+                                'Your receipt has been submitted successfully. We will verify your payment shortly.',
+                                style: TextStyle(fontSize: 16),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.pop(context); // Close confirmation dialog
+                                    Navigator.pop(dialogContext); // Close main payment dialog
+                                  },
+                                  child: const Text('OK',
+                                      style: TextStyle(color: Colors.blue)),
+                                ),
+                              ],
+                            );
+                          },
+                        );
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -855,4 +948,5 @@ class _ProviderHomePageState extends State<ProviderHomePage> {
       },
     );
   }
+
 }

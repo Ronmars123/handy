@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 
 class ManageProvidersPage extends StatefulWidget {
+  const ManageProvidersPage({super.key});
+
   @override
   _ManageProvidersPageState createState() => _ManageProvidersPageState();
 }
@@ -20,7 +22,34 @@ class _ManageProvidersPageState extends State<ManageProvidersPage> {
   void initState() {
     super.initState();
     _fetchProviders();
+     _listenForProviderChanges();
   }
+
+  void _listenForProviderChanges() {
+  _userRef.onValue.listen((event) {
+    if (event.snapshot.value != null) {
+      final data = event.snapshot.value as Map<dynamic, dynamic>;
+
+      setState(() {
+        _providers = data.entries
+            .map((entry) {
+              final value = Map<String, dynamic>.from(entry.value);
+              return {'key': entry.key, ...value};
+            })
+            .where((user) => user['userType'] == 'Provider') // Filter providers
+            .toList();
+
+        _totalProviders = _providers.length; // Update the total provider count
+      });
+    } else {
+      setState(() {
+        _providers = [];
+        _totalProviders = 0;
+      });
+    }
+  });
+}
+
 
   Future<void> _fetchProviders() async {
     final snapshot = await _userRef.get();
@@ -265,17 +294,17 @@ class _ManageProvidersPageState extends State<ManageProvidersPage> {
   }
 
   Future<void> _showAddGcashDialog() async {
-    TextEditingController _gcashNumberController = TextEditingController();
+    TextEditingController gcashNumberController = TextEditingController();
 
     await showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Add GCash Number'),
+          title: const Text('Add GCash Number'),
           content: TextField(
-            controller: _gcashNumberController,
+            controller: gcashNumberController,
             keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               labelText: 'GCash Number',
               hintText: 'Enter GCash Number',
               border: OutlineInputBorder(),
@@ -286,27 +315,27 @@ class _ManageProvidersPageState extends State<ManageProvidersPage> {
               onPressed: () {
                 Navigator.pop(context);
               },
-              child: Text('Cancel'),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () async {
-                if (_gcashNumberController.text.trim().isNotEmpty) {
+                if (gcashNumberController.text.trim().isNotEmpty) {
                   await _gcashNumberRef.set({
-                    'number': _gcashNumberController.text.trim(),
+                    'number': gcashNumberController.text.trim(),
                     'timestamp': DateTime.now().toIso8601String(),
                   });
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('GCash number added successfully!')),
+                    const SnackBar(content: Text('GCash number added successfully!')),
                   );
                   Navigator.pop(context);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
+                    const SnackBar(
                         content: Text('Please enter a valid GCash number.')),
                   );
                 }
               },
-              child: Text('Save'),
+              child: const Text('Save'),
             ),
           ],
         );
@@ -315,19 +344,33 @@ class _ManageProvidersPageState extends State<ManageProvidersPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Manage Providers'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add, color: Colors.white),
-            onPressed: _showAddGcashDialog,
-            tooltip: 'Add GCash Number',
+      Widget build(BuildContext context) {
+        return Scaffold(
+          appBar: AppBar(
+          title: const Text(
+            'Manage Providers',
+            style: TextStyle(
+              color: Colors.white, // Text color set to white
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ],
-      ),
+          centerTitle: true,
+          backgroundColor: Colors.blue, // Set the background color to blue
+          iconTheme: const IconThemeData(
+            color: Colors.white, // Set the back icon color to white
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(
+                Icons.add,
+                color: Colors.white, // Icon color set to white
+              ),
+              onPressed: _showAddGcashDialog,
+              tooltip: 'Add GCash Number',
+            ),
+          ],
+        ),
       body: SafeArea(
         child: Column(
           children: [

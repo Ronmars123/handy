@@ -8,6 +8,8 @@ import 'chatpage.dart'; // Import ChatPages
 import 'login.dart'; // Import LoginPage
 
 class UserHomePage extends StatefulWidget {
+  const UserHomePage({super.key});
+
   @override
   _UserHomePageState createState() => _UserHomePageState();
 }
@@ -16,7 +18,7 @@ class _UserHomePageState extends State<UserHomePage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final DatabaseReference _dbRef =
       FirebaseDatabase.instance.ref('userprofiles');
-
+  int _unseenMessagesCount = 0; // Counter for unseen messages
   List<Map<String, dynamic>> _jobs = [];
   List<Map<String, dynamic>> _filteredJobs = [];
   List<Map<String, dynamic>> _providers = [];
@@ -24,7 +26,6 @@ class _UserHomePageState extends State<UserHomePage> {
   Map<String, dynamic> _currentUserProfile = {};
   String _searchQuery = '';
   String? _selectedCategory;
-
   int _currentIndex = 0;
 
   final List<String> _categories = [
@@ -43,7 +44,38 @@ class _UserHomePageState extends State<UserHomePage> {
     _fetchJobsOfferedByProviders();
     _fetchCurrentUserProfile();
     _fetchProviders();
+    _listenForUnseenMessages();
   }
+  
+
+  void _listenForUnseenMessages() {
+  final String currentUserId = _auth.currentUser?.uid ?? '';
+
+  _dbRef.child('messages').onValue.listen((event) {
+    final data = event.snapshot.value as Map<dynamic, dynamic>?;
+
+    if (data != null) {
+      int unseenCount = 0;
+
+      data.forEach((chatRoomId, messages) {
+        if (messages is Map) {
+          messages.forEach((key, message) {
+            if (message is Map &&
+                message['receiverID'] == currentUserId &&
+                !(message['seen'] ?? false)) {
+              unseenCount++;
+            }
+          });
+        }
+      });
+
+      setState(() {
+        _unseenMessagesCount = unseenCount; // Update the unseen message count
+      });
+    }
+  });
+}
+
 
   Future<void> _fetchJobsOfferedByProviders() async {
     try {
@@ -219,130 +251,143 @@ class _UserHomePageState extends State<UserHomePage> {
   }
 
   Widget _buildJobsPage() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: TextField(
-            decoration: InputDecoration(
-              labelText: 'Search Jobs',
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+  return Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: TextField(
+          controller: TextEditingController()
+            ..text = _searchQuery // Keeps the query text updated
+            ..selection = TextSelection.collapsed(offset: _searchQuery.length),
+          decoration: InputDecoration(
+            labelText: 'Search Jobs',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      setState(() {
+                        _searchQuery = ''; // Clear the search query
+                        _filterJobs(''); // Reset the job filter
+                      });
+                    },
+                  )
+                : null,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
-            onChanged: _filterJobs,
           ),
+          onChanged: _filterJobs,
         ),
-        _buildCategoryFilter(),
-        Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredJobs.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No jobs found.',
-                          style: TextStyle(fontSize: 16, color: Colors.grey),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        itemCount: _filteredJobs.length,
-                        itemBuilder: (context, index) {
-                          final job = _filteredJobs[index];
-                          final firstRating = job['firstRating'] as double?;
-                          final feedbacks =
-                              job['feedbacks'] as List<Map<String, dynamic>>? ??
-                                  [];
+      ),
+      _buildCategoryFilter(),
+      Expanded(
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _filteredJobs.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No jobs found.',
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: _filteredJobs.length,
+                    itemBuilder: (context, index) {
+                      final job = _filteredJobs[index];
+                      final firstRating = job['firstRating'] as double?;
+                      final feedbacks =
+                          job['feedbacks'] as List<Map<String, dynamic>>? ?? [];
 
-                          return Card(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 3,
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    job['jobTitle'],
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.blueAccent,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Category: ${job['category']}',
-                                    style: const TextStyle(fontSize: 14),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Experience: ${job['experience']}',
-                                    style: const TextStyle(fontSize: 14),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Expertise: ${job['expertise']}',
-                                    style: const TextStyle(fontSize: 14),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Provider: ${job['providerName']}',
-                                    style: const TextStyle(fontSize: 14),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              ProviderJobsPage(
-                                            providerId: job['providerId'],
-                                            providerName: job['providerName'],
-                                            selectedJob: job,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blueAccent,
-                                      foregroundColor: Colors.white,
-                                    ),
-                                    child: const Text('Request Service'),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  if (firstRating !=
-                                      null) // Only display if rating exists
-                                    GestureDetector(
-                                      onTap: () =>
-                                          _showFeedbackList(context, feedbacks),
-                                      child: Align(
-                                        alignment: Alignment.bottomRight,
-                                        child: Text(
-                                          '$firstRating ⭐',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontStyle: FontStyle.italic,
-                                            color: Colors.grey,
-                                            decoration:
-                                                TextDecoration.underline,
-                                          ),
-                                        ),
+                      return Card(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 3,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                job['jobTitle'],
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blueAccent,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Category: ${job['category']}',
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Experience: ${job['experience']}',
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Expertise: ${job['expertise']}',
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Provider: ${job['providerName']}',
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                              const SizedBox(height: 8),
+                              ElevatedButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ProviderJobsPage(
+                                        providerId: job['providerId'],
+                                        providerName: job['providerName'],
+                                        selectedJob: job,
                                       ),
                                     ),
-                                ],
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blueAccent,
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('Request Service'),
                               ),
-                            ),
-                          );
-                        },
-                      )),
-      ],
-    );
-  }
+                              const SizedBox(height: 8),
+                              if (firstRating !=
+                                  null) // Only display if rating exists
+                                GestureDetector(
+                                  onTap: () =>
+                                      _showFeedbackList(context, feedbacks),
+                                  child: Align(
+                                    alignment: Alignment.bottomRight,
+                                    child: Text(
+                                      '$firstRating ⭐',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontStyle: FontStyle.italic,
+                                        color: Colors.grey,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+      ),
+    ],
+  );
+}
+
 
   Widget _buildBookedJobsPage() {
     return BookedPage(userId: _auth.currentUser?.uid ?? '');
@@ -511,13 +556,21 @@ class _UserHomePageState extends State<UserHomePage> {
       appBar: AppBar(
         title: const Text(
           'Dashboard',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.white, // Set the text color to white
+          ),
         ),
         centerTitle: true,
         backgroundColor: Colors.blueAccent,
         actions: [
           IconButton(
-            icon: const Icon(Icons.account_circle, size: 28),
+            icon: const Icon(
+              Icons.account_circle,
+              size: 28,
+              color: Colors.white, // Set the profile icon color to white
+            ),
             tooltip: 'View Profile',
             onPressed: _showProfileModal,
           ),
@@ -544,11 +597,35 @@ class _UserHomePageState extends State<UserHomePage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showChatProviderSelector,
-        backgroundColor: Colors.blueAccent,
-        child: const Icon(Icons.chat, color: Colors.white),
-        tooltip: 'Chat with a Provider',
+      floatingActionButton: Stack(
+        children: [
+          FloatingActionButton(
+            onPressed: _showChatProviderSelector,
+            backgroundColor: Colors.blueAccent,
+            tooltip: 'Chat with a Provider',
+            child: const Icon(Icons.chat, color: Colors.white),
+          ),
+          if (_unseenMessagesCount > 0) // Show badge if there are unseen messages
+            Positioned(
+              right: 0,
+              top: 0,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '$_unseenMessagesCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

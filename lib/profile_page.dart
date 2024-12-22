@@ -184,6 +184,76 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  void _viewReports() async {
+  final user = _firebaseAuth.currentUser; // Get current user
+  if (user == null) return; // Exit if no user is logged in
+
+  final reportsRef = FirebaseDatabase.instance.ref('reports');
+  final snapshot = await reportsRef.get();
+
+  if (!snapshot.exists) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No reports available.')),
+    );
+    return;
+  }
+
+  // Filter reports by providerId matching the current user's uid
+  final reports = (snapshot.value as Map).entries.where((entry) {
+    final data = entry.value as Map<dynamic, dynamic>;
+    return data['providerId'] == user.uid; // Match providerId with user.uid
+  }).map((filteredEntry) {
+    final data = filteredEntry.value as Map<dynamic, dynamic>;
+    return {
+      'description': data['description'],
+      'reportType': data['reportType'],
+      'providerName': data['providerName'],
+      'timestamp': data['timestamp'],
+    };
+  }).toList();
+
+  if (reports.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No reports available for your account.')),
+    );
+    return;
+  }
+
+  // Display the filtered reports in a dialog
+  showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('My Reports'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            itemCount: reports.length,
+            itemBuilder: (context, index) {
+              final report = reports[index];
+              return ListTile(
+                title: Text('Type: ${report['reportType']}'),
+                subtitle: Text(
+                    'Provider: ${report['providerName']}\nDescription: ${report['description']}\nTimestamp: ${report['timestamp']}'),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+
   @override
   Widget build(BuildContext context) {
     final coordinates = widget.userProfile['coordinates'] as Map?;
@@ -296,13 +366,23 @@ class _ProfilePageState extends State<ProfilePage> {
                   subtitle: Text('${subscription['end'] ?? 'N/A'}'),
                 ),
               ] else ...[
-                ListTile(
+                const ListTile(
                   leading:
-                      const Icon(Icons.info_outline, color: Colors.blueAccent),
-                  title: const Text('Subscription'),
-                  subtitle: const Text('Not Subscribed Yet'),
+                      Icon(Icons.info_outline, color: Colors.blueAccent),
+                  title: Text('Subscription'),
+                  subtitle: Text('Not Subscribed Yet'),
                 ),
               ],
+              const Divider(),
+              ElevatedButton.icon(
+                onPressed: _viewReports,
+                icon: const Icon(Icons.report),
+                label: const Text('View Reports'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orangeAccent,
+                  foregroundColor: Colors.white,
+                ),
+              ),
             ],
             const SizedBox(height: 16),
             ElevatedButton.icon(

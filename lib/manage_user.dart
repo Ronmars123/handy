@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 
 class ManageUserPage extends StatefulWidget {
+  const ManageUserPage({super.key});
+
   @override
   _ManageUserPageState createState() => _ManageUserPageState();
 }
@@ -68,27 +70,54 @@ class _ManageUserPageState extends State<ManageUserPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Manage Users'),
-        centerTitle: true,
+      title: const Text(
+        'Manage Users',
+        style: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: Color.fromARGB(255, 255, 255, 255), // White text color
+        ),
       ),
+      centerTitle: true,
+      backgroundColor: Colors.blueAccent, // Blue background color
+      iconTheme: const IconThemeData(
+        color: Colors.white, // Back icon color set to white
+      ),
+    ),
       body: SafeArea(
         child: Column(
           children: [
+            // Total Users Section
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  const Icon(
+                    Icons.group,
+                    size: 28,
+                    color: Colors.blueAccent,
+                  ),
+                  const SizedBox(width: 10),
                   Text(
                     'Total Users: $_totalUsers',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
                   ),
                 ],
               ),
             ),
+
+            // User List Section
             Expanded(
               child: _users.isEmpty
-                  ? Center(child: CircularProgressIndicator())
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: Colors.blueAccent,
+                      ),
+                    )
                   : ListView.builder(
                       itemCount: _users.length,
                       itemBuilder: (context, index) {
@@ -96,52 +125,106 @@ class _ManageUserPageState extends State<ManageUserPage> {
                         final bool isDisabled = user['disable'] ?? false;
 
                         return Card(
-                          margin:
-                              EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: ListTile(
-                            title: Text(
-                                '${user['firstName']} ${user['lastName']}'),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 4,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Row(
                               children: [
-                                Text('Email: ${user['email']}'),
-                                Text(
-                                  'Status: ${isDisabled ? 'Disabled' : 'Active'}',
-                                  style: TextStyle(
-                                    color:
-                                        isDisabled ? Colors.red : Colors.green,
-                                    fontWeight: FontWeight.bold,
+                                // User Icon
+                                const CircleAvatar(
+                                  backgroundColor: Colors.blueAccent,
+                                  child: Icon(Icons.person, color: Colors.white),
+                                ),
+                                const SizedBox(width: 12),
+
+                                // User Details
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${user['firstName']} ${user['lastName']}',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Email: ${user['email']}',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.black54,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          const Text(
+                                            'Status: ',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.black54,
+                                            ),
+                                          ),
+                                          Chip(
+                                            label: Text(
+                                              isDisabled
+                                                  ? 'Disabled'
+                                                  : 'Active',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                            backgroundColor: isDisabled
+                                                ? Colors.red
+                                                : Colors.green,
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (!isDisabled)
-                                  ElevatedButton(
-                                    onPressed: () =>
-                                        _updateUserStatus(user['key'], true),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.red,
-                                    ),
-                                    child: Text(
-                                      'Disable',
-                                      style: TextStyle(color: Colors.white),
-                                    ),
+
+                                // Action Buttons
+                                PopupMenuButton<String>(
+                                  onSelected: (String value) {
+                                    if (value == 'Disable') {
+                                      _updateUserStatus(user['key'], true);
+                                    } else if (value == 'Activate') {
+                                      _updateUserStatus(user['key'], false);
+                                    }
+                                  },
+                                  itemBuilder: (context) {
+                                    return isDisabled
+                                        ? [
+                                            const PopupMenuItem(
+                                              value: 'Activate',
+                                              child: Text('Activate'),
+                                            ),
+                                          ]
+                                        : [
+                                            const PopupMenuItem(
+                                              value: 'Disable',
+                                              child: Text('Disable'),
+                                            ),
+                                          ];
+                                  },
+                                  icon: const Icon(
+                                    Icons.more_vert,
+                                    color: Colors.black54,
                                   ),
-                                if (isDisabled)
-                                  ElevatedButton(
-                                    onPressed: () =>
-                                        _updateUserStatus(user['key'], false),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.green,
-                                    ),
-                                    child: Text(
-                                      'Activate',
-                                      style: TextStyle(color: Colors.white),
-                                    ),
-                                  ),
+                                ),
                               ],
                             ),
                           ),
