@@ -370,7 +370,7 @@ class _ProviderHomePageState extends State<ProviderHomePage> {
       case 0:
         return _buildHomeScreen(); // Home Page
       case 1:
-        return AddJobPage(); // Add Job Page
+        return const AddJobPage(); // Add Job Page
       case 2:
         return const BookedUsersPage(); // Bookings Page
       case 3:
@@ -728,7 +728,7 @@ class _ProviderHomePageState extends State<ProviderHomePage> {
     await _auth.signOut();
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (context) => LoginPage()),
+      MaterialPageRoute(builder: (context) => const LoginPage()),
       (route) => false,
     );
   }

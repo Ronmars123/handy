@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 class ProviderJobsPage extends StatefulWidget {
   final String providerId;
@@ -20,7 +20,8 @@ class ProviderJobsPage extends StatefulWidget {
 class _ProviderJobsPageState extends State<ProviderJobsPage> {
   final DatabaseReference _dbRef = FirebaseDatabase.instance.ref();
   bool _isBooked = false;
-  DateTime? _selectedDate; // Holds the selected date for booking
+  String? _bookingStatus; 
+
 
   @override
   void initState() {
@@ -29,42 +30,77 @@ class _ProviderJobsPageState extends State<ProviderJobsPage> {
   }
 
   Future<void> _checkIfJobIsBooked() async {
-    final user = FirebaseAuth.instance.currentUser;
+  final user = FirebaseAuth.instance.currentUser;
 
-    if (user == null) return;
+  if (user == null) return;
 
-    try {
-      final String uniqueJobKey =
-          '${user.uid}_${widget.selectedJob['jobTitle'].toString().replaceAll(' ', '_')}';
+  try {
+    final String uniqueJobKey =
+        '${user.uid}_${widget.selectedJob['jobTitle'].toString().replaceAll(' ', '_')}';
 
-      final userBookingsRef =
-          _dbRef.child('userprofiles/${user.uid}/book_jobs/$uniqueJobKey');
-      final snapshot = await userBookingsRef.get();
+    final userBookingsRef =
+        _dbRef.child('userprofiles/${user.uid}/book_jobs/$uniqueJobKey');
+    final snapshot = await userBookingsRef.get();
+
+    if (snapshot.exists) {
+      final bookingData = Map<String, dynamic>.from(snapshot.value as Map);
 
       setState(() {
-        _isBooked = snapshot.exists;
+        _isBooked = true;
+        _bookingStatus = bookingData['status'] as String?; // Retrieve the status
       });
-    } catch (e) {
-      print('Error checking booking status: $e');
-    }
-  }
-
-  /// Show Date Picker and Book Job
-  void _pickDateAndBookJob() async {
-    final selectedDate = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)), // 1 year range
-    );
-
-    if (selectedDate != null) {
+    } else {
       setState(() {
-        _selectedDate = selectedDate; // Save the selected date
+        _isBooked = false;
+        _bookingStatus = null;
       });
-      _bookJob(selectedDate); // Proceed with booking
     }
+  } catch (e) {
+    print('Error checking booking status: $e');
   }
+}
+
+
+
+    /// Show Date and Time Picker and Book Job
+    void _pickDateAndBookJob() async {
+      // Show Date Picker
+      final selectedDate = await showDatePicker(
+        context: context,
+        initialDate: DateTime.now(),
+        firstDate: DateTime.now(),
+        lastDate: DateTime.now().add(const Duration(days: 365)), // 1 year range
+      );
+
+      if (selectedDate == null) return; // User canceled the date picker
+
+      // Show Time Picker
+      final selectedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.now(),
+      );
+
+      if (selectedTime == null) return; // User canceled the time picker
+
+      // Combine selected date and time into a single DateTime object
+      final DateTime selectedDateTime = DateTime(
+        selectedDate.year,
+        selectedDate.month,
+        selectedDate.day,
+        selectedTime.hour,
+        selectedTime.minute,
+      );
+
+      // Save and use the combined date and time
+      setState(() {
+// Save the combined DateTime
+      });
+
+      // Call the booking method with the selected date and time
+      _bookJob(selectedDateTime);
+    }
+
+
 
   void _reportUser() async {
   final user = FirebaseAuth.instance.currentUser;
@@ -201,7 +237,7 @@ class _ProviderJobsPageState extends State<ProviderJobsPage> {
 }
 
 
-  void _bookJob(DateTime selectedDate) async {
+  void _bookJob(DateTime selectedDateTime) async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
@@ -216,26 +252,25 @@ class _ProviderJobsPageState extends State<ProviderJobsPage> {
 
     try {
       final DateTime now = DateTime.now();
-      DatabaseReference userProfileRef =
-          _dbRef.child('userprofiles/${user.uid}');
+      DatabaseReference userProfileRef = _dbRef.child('userprofiles/${user.uid}');
       final userProfileSnapshot = await userProfileRef.get();
+
       if (!userProfileSnapshot.exists) {
         throw Exception('User profile not found.');
       }
 
-      final userData =
-          Map<String, dynamic>.from(userProfileSnapshot.value as Map);
+      final userData = Map<String, dynamic>.from(userProfileSnapshot.value as Map);
       final String fullName =
           '${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}';
       final String address = userData['address'] ?? 'N/A';
       final String contactNumber = userData['contactNumber'] ?? 'N/A';
 
-      // Create the unique key using userId and jobTitle
+      // Create a unique job key
       final String sanitizedJobTitle =
           widget.selectedJob['jobTitle'].toString().replaceAll(' ', '_');
       final String uniqueJobKey = '${user.uid}_$sanitizedJobTitle';
 
-      // Data for the booking
+      // Booking data
       final bookingData = {
         'jobTitle': widget.selectedJob['jobTitle'] ?? 'No Title',
         'about': widget.selectedJob['about'] ?? 'No Description',
@@ -249,16 +284,16 @@ class _ProviderJobsPageState extends State<ProviderJobsPage> {
         'fullName': fullName,
         'address': address,
         'contactNumber': contactNumber,
-        'selected_schedule': selectedDate.toIso8601String(),
+        'selected_schedule': selectedDateTime.toIso8601String(), // Store combined DateTime
         'timestamp': now.toIso8601String(),
       };
 
-      // Save booking under the user profile with unique key
+      // Save booking under the user's profile
       DatabaseReference userBookingsRef =
           _dbRef.child('userprofiles/${user.uid}/book_jobs');
       await userBookingsRef.child(uniqueJobKey).set(bookingData);
 
-      // Save booking under the provider's booked users with unique key
+      // Save booking under the provider's booked users
       DatabaseReference providerBookedUsersRef =
           _dbRef.child('userprofiles/${widget.providerId}/bookedUsers');
       await providerBookedUsersRef.child(uniqueJobKey).set({
@@ -285,6 +320,7 @@ class _ProviderJobsPageState extends State<ProviderJobsPage> {
       );
     }
   }
+
 
   void _cancelBooking() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -542,22 +578,35 @@ class _ProviderJobsPageState extends State<ProviderJobsPage> {
               _buildDetailRow('Expertise:', job['expertise'] ?? 'N/A'),
               const SizedBox(height: 20),
               Center(
-                child: ElevatedButton.icon(
-                  onPressed: _isBooked ? _cancelBooking : _pickDateAndBookJob,
-                  icon: Icon(
-                    _isBooked ? Icons.cancel : Icons.calendar_today,
-                  ),
-                  label: Text(_isBooked ? 'Cancel Booking' : 'Book Now'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isBooked ? Colors.red : Colors.green,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
+                child: _isBooked && _bookingStatus == 'Ongoing'
+                    ? ElevatedButton.icon(
+                        onPressed: null, // Disable the button
+                        icon: const Icon(Icons.hourglass_top), // Processing icon
+                        label: const Text('Processing'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey, // Gray color to indicate disabled state
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      )
+                    : ElevatedButton.icon(
+                        onPressed: _isBooked ? _cancelBooking : _pickDateAndBookJob,
+                        icon: Icon(
+                          _isBooked ? Icons.cancel : Icons.calendar_today,
+                        ),
+                        label: Text(_isBooked ? 'Cancel Booking' : 'Book Now'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isBooked ? Colors.red : Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
               ),
               const SizedBox(height: 16),
               Center(

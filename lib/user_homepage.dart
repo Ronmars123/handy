@@ -458,7 +458,7 @@ class _UserHomePageState extends State<UserHomePage> {
     await _auth.signOut();
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (context) => LoginPage()),
+      MaterialPageRoute(builder: (context) => const LoginPage()),
       (route) => false,
     );
   }
@@ -611,7 +611,7 @@ class _UserHomePageState extends State<UserHomePage> {
               top: 0,
               child: Container(
                 padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: Colors.red,
                   shape: BoxShape.circle,
                 ),

@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:handycrew/edit_profile.dart';
-import 'provider_homepage.dart';
 import 'user_homepage.dart';
+import 'provider_homepage.dart';
+import 'package:flutter/material.dart';
+import 'package:handycrew/edit_profile.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'admin_homepage.dart'; // Import AdminHomePage
+import 'package:firebase_database/firebase_database.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -18,6 +18,8 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
+  // Boolean to toggle password visibility
+  bool _showPassword = false; 
   DateTime? lastResendTime;
 
  Future<void> _login() async {
@@ -100,13 +102,13 @@ class _LoginPageState extends State<LoginPage> {
         case 'User':
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => UserHomePage()),
+            MaterialPageRoute(builder: (context) => const UserHomePage()),
           );
           break;
         case 'Provider':
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => ProviderHomePage()),
+            MaterialPageRoute(builder: (context) => const ProviderHomePage()),
           );
           break;
         case 'Admin':
@@ -184,21 +186,17 @@ void _resendVerificationEmail(User user) async {
   }
 
   try {
-    if (user != null) {
-      await user.sendEmailVerification();
-      lastResendTime = now; // Update last resend time
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'A new verification email has been sent. Please check your inbox.',
-          ),
-          backgroundColor: Colors.green,
+    await user.sendEmailVerification();
+    lastResendTime = now; // Update last resend time
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'A new verification email has been sent. Please check your inbox.',
         ),
-      );
-    } else {
-      throw Exception('User object is null.');
-    }
-  } catch (e) {
+        backgroundColor: Colors.green,
+      ),
+    );
+    } catch (e) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -218,11 +216,11 @@ void _showEmailVerificationDialog(User user) {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12), // Rounded corners
       ),
-      title: Row(
+      title: const Row(
         children: [
-          const Icon(Icons.email_outlined, color: Colors.blueAccent, size: 28),
-          const SizedBox(width: 8),
-          const Text(
+          Icon(Icons.email_outlined, color: Colors.blueAccent, size: 28),
+          SizedBox(width: 8),
+          Text(
             'Email Not Verified',
             style: TextStyle(
               fontSize: 20,
@@ -232,18 +230,18 @@ void _showEmailVerificationDialog(User user) {
           ),
         ],
       ),
-      content: Column(
+      content: const Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
+          Text(
             'Your email address is not verified. Please check your inbox and verify your email to continue.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16, color: Colors.black87),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
+            children: [
               Icon(Icons.check_circle, color: Colors.green, size: 24),
               SizedBox(width: 8),
               Text(
@@ -274,7 +272,7 @@ void _showEmailVerificationDialog(User user) {
                   );
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
+                    const SnackBar(
                       content: Text(
                         'Failed to send verification email. Please try again later.',
                       ),
@@ -370,10 +368,20 @@ void _showEmailVerificationDialog(User user) {
                           const SizedBox(height: 16),
                           TextField(
                             controller: _passwordController,
-                            obscureText: true,
+                            obscureText: !_showPassword, // Toggle password visibility
                             decoration: InputDecoration(
                               labelText: 'Password',
                               prefixIcon: const Icon(Icons.lock_outline),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _showPassword ? Icons.visibility : Icons.visibility_off,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _showPassword = !_showPassword; // Toggle the visibility
+                                  });
+                                },
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),

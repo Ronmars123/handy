@@ -9,11 +9,13 @@ import 'manage_user.dart';
 class AdminHomePage extends StatelessWidget {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  AdminHomePage({super.key});
+
   void _logout(BuildContext context) async {
     await _auth.signOut(); // Sign out from Firebase Auth
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (context) => LoginPage()),
+      MaterialPageRoute(builder: (context) => const LoginPage()),
       (route) => false, // Remove all previous routes
     );
   }
@@ -108,7 +110,7 @@ class AdminHomePage extends StatelessWidget {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => ManageUserPage()),
+                            MaterialPageRoute(builder: (context) => const ManageUserPage()),
                           );
                         },
                       ),
@@ -136,7 +138,7 @@ class AdminHomePage extends StatelessWidget {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => ManageProvidersPage()),
+                            MaterialPageRoute(builder: (context) => const ManageProvidersPage()),
                           );
                         },
                       ),

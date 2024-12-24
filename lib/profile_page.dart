@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_database/firebase_database.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -97,6 +97,95 @@ class _ProfilePageState extends State<ProfilePage> {
       );
     }
   }
+
+  Future<void> _viewFeedbacks() async {
+      final user = _firebaseAuth.currentUser; // Get current user
+      if (user == null) return; // Exit if no user is logged in
+
+      final feedbackRef = _dbRef.child(user.uid).child('feedbacks');
+      final snapshot = await feedbackRef.get();
+
+      if (!snapshot.exists) {
+        // Show dialog when no feedbacks exist
+        showDialog(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: const Text('No Feedback'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              content: const Text(
+                'No feedback available for your account yet.',
+                style: TextStyle(fontSize: 16),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context), // Close the dialog
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+        return;
+      }
+
+      // Parse feedbacks into a list
+      final feedbacks = (snapshot.value as Map).values.map((feedback) {
+        final data = feedback as Map<dynamic, dynamic>;
+        return {
+          'feedback': data['feedback'] ?? 'No feedback',
+          'fullName': data['fullName'] ?? 'Anonymous',
+          'rating': data['rating'] ?? 0,
+          'timestamp': data['timestamp'] ?? 'N/A',
+        };
+      }).toList();
+
+      // Display the feedbacks in a dialog
+      showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Feedbacks'),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView.builder(
+                itemCount: feedbacks.length,
+                itemBuilder: (context, index) {
+                  final feedback = feedbacks[index];
+                  return Card(
+                    elevation: 4,
+                    margin: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.blueAccent,
+                        child: Text(
+                          feedback['rating'].toString(),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                      title: Text(feedback['fullName']),
+                      subtitle: Text(
+                          'Feedback: ${feedback['feedback']}\nTimestamp: ${feedback['timestamp']}'),
+                    ),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      );
+    }
 
   void _showEditForm() {
     showDialog(
@@ -255,7 +344,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
 
   @override
-  Widget build(BuildContext context) {
+    Widget build(BuildContext context) {
     final coordinates = widget.userProfile['coordinates'] as Map?;
     final latitude = coordinates?['latitude'] ?? 'Not provided';
     final longitude = coordinates?['longitude'] ?? 'Not provided';
@@ -367,21 +456,58 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ] else ...[
                 const ListTile(
-                  leading:
-                      Icon(Icons.info_outline, color: Colors.blueAccent),
+                  leading: Icon(Icons.info_outline, color: Colors.blueAccent),
                   title: Text('Subscription'),
                   subtitle: Text('Not Subscribed Yet'),
                 ),
               ],
               const Divider(),
-              ElevatedButton.icon(
-                onPressed: _viewReports,
-                icon: const Icon(Icons.report),
-                label: const Text('View Reports'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orangeAccent,
-                  foregroundColor: Colors.white,
-                ),
+
+              // Row for View Feedbacks and View Reports Buttons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _viewFeedbacks, // Call the view feedbacks function
+                    icon: const Icon(
+                      Icons.feedback,
+                      size: 18, // Smaller icon size
+                    ),
+                    label: const Text(
+                      'Feedbacks',
+                      style: TextStyle(fontSize: 14), // Smaller font size
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8, // Reduced horizontal padding
+                        vertical: 8, // Reduced vertical padding
+                      ),
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(120, 36), // Minimum button size
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _viewReports, // Call the view reports function
+                    icon: const Icon(
+                      Icons.report,
+                      size: 18, // Smaller icon size
+                    ),
+                    label: const Text(
+                      'Reports',
+                      style: TextStyle(fontSize: 14), // Smaller font size
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8, // Reduced horizontal padding
+                        vertical: 8, // Reduced vertical padding
+                      ),
+                      backgroundColor: Colors.orangeAccent,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(120, 36), // Minimum button size
+                    ),
+                  ),
+                ],
               ),
             ],
             const SizedBox(height: 16),
@@ -409,4 +535,5 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
+
 }

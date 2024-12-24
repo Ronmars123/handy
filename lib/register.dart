@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'edit_profile.dart'; // Import the EditProfilePage
+// Import the EditProfilePage
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -16,6 +16,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _isTermsAccepted = false; // Track if the checkbox is checked
 
   Future<void> _register() async {
     setState(() {
@@ -173,19 +174,67 @@ class _RegisterPageState extends State<RegisterPage> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 16),
+                          // Terms and Conditions Checkbox
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            children: [
+                              Checkbox(
+                                value: _isTermsAccepted,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _isTermsAccepted = value ?? false;
+                                  });
+                                },
+                              ),
+                              Flexible(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    // You can navigate to a Terms and Conditions page here
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('Terms and Conditions'),
+                                        content: const Text(
+                                            'Add your terms and conditions here.'),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context),
+                                            child: const Text('OK'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                  child: const Text(
+                                    'I agree to the Terms and Conditions',
+                                    style: TextStyle(
+                                      color: Colors.blue,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
                           // Register Button
                           _isLoading
                               ? const CircularProgressIndicator()
                               : ElevatedButton(
-                                  onPressed: _register,
+                                  onPressed: _isTermsAccepted
+                                      ? _register
+                                      : null, // Disable if terms not accepted
                                   style: ElevatedButton.styleFrom(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 80, vertical: 16),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    backgroundColor: Colors.blueAccent,
+                                    backgroundColor: _isTermsAccepted
+                                        ? Colors.blueAccent
+                                        : Colors.grey, // Grey when disabled
                                   ),
                                   child: const Text(
                                     'Register',

@@ -10,7 +10,7 @@ import 'login.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -22,10 +22,10 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       home: AuthWrapper(), // Start with the AuthWrapper widget
       routes: {
-        '/register': (context) => RegisterPage(),
-        '/edit_profile': (context) => EditProfilePage(),
-        '/user_homepage': (context) => UserHomePage(),
-        '/provider_homepage': (context) => ProviderHomePage(),
+        '/register': (context) => const RegisterPage(),
+        '/edit_profile': (context) => const EditProfilePage(),
+        '/user_homepage': (context) => const UserHomePage(),
+        '/provider_homepage': (context) => const ProviderHomePage(),
       },
     );
   }
@@ -33,6 +33,8 @@ class MyApp extends StatelessWidget {
 
 /// A widget to determine the initial screen based on user authentication
 class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
   @override
   Widget build(BuildContext context) {
     // Check the current user from Firebase Auth
@@ -53,11 +55,11 @@ class AuthWrapper extends StatelessWidget {
           if (user.displayName == 'Provider') {
             return const ProviderHomePage();
           } else {
-            return  UserHomePage();
+            return  const UserHomePage();
           }
         } else {
           // User is logged out
-          return LoginPage();
+          return const LoginPage();
         }
       },
     );

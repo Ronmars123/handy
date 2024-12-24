@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:handycrew/login.dart';
+import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:handycrew/User_homepage.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:handycrew/provider_homepage.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/services.dart'; // Required for input formatters
 
 class EditProfilePage extends StatefulWidget {
   final User? user;
@@ -28,55 +29,55 @@ class _EditProfilePageState extends State<EditProfilePage> {
   double? _longitude;
   bool _isLocationFetched = false;
 
-    Future<void> _saveProfile() async {
-      if (_firstNameController.text.isEmpty ||
-          _lastNameController.text.isEmpty ||
-          _contactController.text.isEmpty ||
-          _addressController.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please fill in all the fields')),
-        );
-        return;
-      }
-
-      try {
-        // Save profile details to Firebase Realtime Database
-        await _database.child('userprofiles/${widget.user?.uid}').set({
-          'firstName': _firstNameController.text.trim(),
-          'lastName': _lastNameController.text.trim(),
-          'contactNumber': _contactController.text.trim(),
-          'address': _addressController.text.trim(),
-          'userType': _selectedUserType,
-          'coordinates': {
-            'latitude': _latitude ?? 'Not provided',
-            'longitude': _longitude ?? 'Not provided',
-          },
-          'email': widget.user?.email,
-          'profile_setup': true, // Mark profile as setup
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile Updated Successfully!')),
-        );
-
-        // Navigate to the appropriate home page based on the user type
-        if (_selectedUserType == 'Provider') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => ProviderHomePage()),
-          );
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => UserHomePage()),
-          );
-        }
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving profile: $e')),
-        );
-      }
+  Future<void> _saveProfile() async {
+    if (_firstNameController.text.isEmpty ||
+        _lastNameController.text.isEmpty ||
+        _contactController.text.isEmpty ||
+        _addressController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all the fields')),
+      );
+      return;
     }
+
+    try {
+      // Save profile details to Firebase Realtime Database
+      await _database.child('userprofiles/${widget.user?.uid}').set({
+        'firstName': _firstNameController.text.trim(),
+        'lastName': _lastNameController.text.trim(),
+        'contactNumber': _contactController.text.trim(),
+        'address': _addressController.text.trim(),
+        'userType': _selectedUserType,
+        'coordinates': {
+          'latitude': _latitude ?? 'Not provided',
+          'longitude': _longitude ?? 'Not provided',
+        },
+        'email': widget.user?.email,
+        'profile_setup': true, // Mark profile as setup
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile Updated Successfully!')),
+      );
+
+      // Navigate to the appropriate home page based on the user type
+      if (_selectedUserType == 'Provider') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const ProviderHomePage()),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const UserHomePage()),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error saving profile: $e')),
+      );
+    }
+  }
 
   Future<void> _getCurrentLocation() async {
     try {
@@ -96,13 +97,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
       setState(() {
         _latitude = position.latitude;
         _longitude = position.longitude;
+        _addressController.text =
+            'Lat: ${_latitude!.toStringAsFixed(4)}, Lon: ${_longitude!.toStringAsFixed(4)}';
         _isLocationFetched = true; // Mark location as fetched
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'Location fetched: Latitude: $_latitude, Longitude: $_longitude'),
+        const SnackBar(
+          content: Text('Location fetched successfully!'),
         ),
       );
     } catch (e) {
@@ -132,10 +134,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
     required String label,
     IconData? icon,
     TextInputType keyboardType = TextInputType.text,
+    bool readOnly = false,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
+      readOnly: readOnly,
+      inputFormatters: inputFormatters, // Apply input formatters
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: Colors.blue),
@@ -161,7 +167,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         title: const Text(
           'Edit Profile',
           style: TextStyle(color: Colors.white, fontSize: 20),
-          textAlign: TextAlign.left, // Align title to the left
+          textAlign: TextAlign.left,
         ),
         actions: [
           IconButton(
@@ -214,12 +220,17 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           label: 'Contact Number',
                           icon: Icons.phone,
                           keyboardType: TextInputType.phone,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(11), // Limit to 11 digits
+                          ],
                         ),
                         const SizedBox(height: 16),
                         _buildInputField(
                           controller: _addressController,
                           label: 'Address',
                           icon: Icons.home,
+                          readOnly: true, // Make address field read-only
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<String>(
@@ -262,31 +273,20 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: _getCurrentLocation,
-                          icon: const Icon(Icons.location_on, color: Colors.white),
-                          label: const Text(
-                            'Get Current Location',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            minimumSize: const Size(double.infinity, 48),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
+                    child: ElevatedButton.icon(
+                      onPressed: _getCurrentLocation,
+                      icon: const Icon(Icons.location_on, color: Colors.white),
+                      label: const Text(
+                        'Get Current Location',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        if (_latitude != null && _longitude != null) ...[
-                          const SizedBox(height: 16),
-                          Text(
-                            'Latitude: $_latitude\nLongitude: $_longitude',
-                            style: const TextStyle(fontSize: 16, color: Colors.blue),
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
                   ),
                 ),

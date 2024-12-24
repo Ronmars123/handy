@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:handycrew/location_maps.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 
 class BookedUsersPage extends StatefulWidget {
   const BookedUsersPage({Key? key}) : super(key: key);
@@ -311,8 +314,10 @@ class _BookedUsersPageState extends State<BookedUsersPage> {
   if (user['selected_schedule'] != null && user['selected_schedule'].isNotEmpty) {
     try {
       final DateTime date = DateTime.parse(user['selected_schedule']);
+      final String formattedTime =
+          '${date.hour > 12 ? (date.hour - 12) : (date.hour == 0 ? 12 : date.hour)}:${date.minute.toString().padLeft(2, '0')} ${date.hour >= 12 ? 'PM' : 'AM'}';
       formattedSchedule =
-          '${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}-${date.year}';
+          '${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}-${date.year} at $formattedTime';
     } catch (e) {
       print('Error parsing date: $e');
     }
@@ -333,6 +338,10 @@ class _BookedUsersPageState extends State<BookedUsersPage> {
           ? 'Ongoing'
           : 'Process';
   bool isButtonDisabled = isOngoingOrProcess || isCompleted;
+
+  // Example latitude and longitude (fallback if user['lat'] or user['lon'] is null)
+  double latitude = user['lat'] ?? 7.1453;
+  double longitude = user['lon'] ?? 125.6518;
 
   return Card(
     elevation: 4,
@@ -360,15 +369,34 @@ class _BookedUsersPageState extends State<BookedUsersPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            user['fullName'] ?? 'No Full Name',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+          // Top section with location
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                user['fullName'] ?? 'No Full Name',
+                style: const TextStyle(
+                  fontSize: 16, // Reduced size
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              if (user['address'] != null && user['address'].isNotEmpty)
+                Text(
+                  user['address'],
+                  style: const TextStyle(
+                    fontSize: 10, // Reduced size
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.right,
+                  overflow: TextOverflow.ellipsis,
+                ),
+            ],
           ),
           const SizedBox(height: 8),
+
+          // Email and contact number
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -380,7 +408,10 @@ class _BookedUsersPageState extends State<BookedUsersPage> {
                     Flexible(
                       child: Text(
                         user['email'] ?? 'No Email',
-                        style: const TextStyle(color: Colors.black54),
+                        style: const TextStyle(
+                          fontSize: 12, // Reduced size
+                          color: Colors.black54,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -395,7 +426,10 @@ class _BookedUsersPageState extends State<BookedUsersPage> {
                     Flexible(
                       child: Text(
                         user['contactNumber'] ?? 'No Contact Number',
-                        style: const TextStyle(color: Colors.black54),
+                        style: const TextStyle(
+                          fontSize: 12, // Reduced size
+                          color: Colors.black54,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -405,6 +439,8 @@ class _BookedUsersPageState extends State<BookedUsersPage> {
             ],
           ),
           const SizedBox(height: 8),
+
+          // Schedule and address
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -417,7 +453,10 @@ class _BookedUsersPageState extends State<BookedUsersPage> {
                     Flexible(
                       child: Text(
                         formattedSchedule,
-                        style: const TextStyle(color: Colors.black54),
+                        style: const TextStyle(
+                          fontSize: 12, // Reduced size
+                          color: Colors.black54,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -433,7 +472,10 @@ class _BookedUsersPageState extends State<BookedUsersPage> {
                     Flexible(
                       child: Text(
                         user['address'] ?? 'No Address',
-                        style: const TextStyle(color: Colors.black54),
+                        style: const TextStyle(
+                          fontSize: 12, // Reduced size
+                          color: Colors.black54,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -443,40 +485,66 @@ class _BookedUsersPageState extends State<BookedUsersPage> {
             ],
           ),
           const SizedBox(height: 12),
+
+          // Status, Google Maps button, and action button
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 status.capitalize(),
                 style: TextStyle(
+                  fontSize: 12, // Reduced size
                   color: statusColor,
-                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              ElevatedButton(
-                onPressed: isButtonDisabled
-                    ? null
-                    : () {
-                        _processBooking(user);
-                      },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isCompleted
-                      ? Colors.grey
-                      : isButtonDisabled
-                          ? Colors.grey
-                          : Colors.green,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+              Row(
+                children: [
+                  ElevatedButton(
+                    onPressed: () => LocationMaps.openGoogleMaps(latitude, longitude),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'Google Map',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
                   ),
-                ),
-                child: Text(
-                  buttonText,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: isButtonDisabled
+                        ? null
+                        : () {
+                            _processBooking(user);
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isCompleted
+                          ? Colors.grey
+                          : isButtonDisabled
+                              ? Colors.grey
+                              : Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      buttonText,
+                      style: const TextStyle(
+                        fontSize: 12, // Reduced size
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -485,7 +553,6 @@ class _BookedUsersPageState extends State<BookedUsersPage> {
     ),
   );
 }
-
 
   Widget _buildCompletedJobCard(Map<String, dynamic> job) {
     return Card(

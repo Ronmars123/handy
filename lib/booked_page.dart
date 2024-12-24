@@ -1,6 +1,8 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+
 
 class BookedPage extends StatefulWidget {
   final String userId;
@@ -12,23 +14,37 @@ class BookedPage extends StatefulWidget {
 }
 
 class _BookedPageState extends State<BookedPage> {
-  Future<List<Map<String, dynamic>>> _fetchBookedJobs() async {
-    // References for booked jobs and completed jobs
-    final DatabaseReference userBookingsRef = FirebaseDatabase.instance
-        .ref('userprofiles/${widget.userId}/book_jobs');
-    final DatabaseReference completedJobsRef = FirebaseDatabase.instance
-        .ref('userprofiles/${widget.userId}/job_completed');
+  late DatabaseReference _userBookingsRef;
+  late DatabaseReference _completedJobsRef;
+  StreamSubscription<DatabaseEvent>? _bookingsSubscription;
+  StreamSubscription<DatabaseEvent>? _completedJobsSubscription;
 
-    try {
-      // Fetch both booked jobs and completed jobs
-      final userBookingsSnapshot = await userBookingsRef.get();
-      final completedJobsSnapshot = await completedJobsRef.get();
+  List<Map<String, dynamic>> _bookJobsList = [];
+  List<Map<String, dynamic>> _completedJobsList = [];
+  List<Map<String, dynamic>> _bookedJobs = []; // Combined list of all jobs
+  bool _isLoading = true;
 
-      List<Map<String, dynamic>> jobsList = [];
+  @override
+  void initState() {
+    super.initState();
 
-      // Extract booked jobs
-      if (userBookingsSnapshot.exists && userBookingsSnapshot.value is Map) {
-        final data = userBookingsSnapshot.value as Map<dynamic, dynamic>;
+    // References for real-time updates
+    _userBookingsRef =
+        FirebaseDatabase.instance.ref('userprofiles/${widget.userId}/book_jobs');
+    _completedJobsRef =
+        FirebaseDatabase.instance.ref('userprofiles/${widget.userId}/job_completed');
+
+    _listenForChanges(); // Start listening to changes in the database
+  }
+
+  /// Listen for changes in `book_jobs` and `job_completed`
+  void _listenForChanges() {
+    // Listen for changes in `book_jobs`
+    _bookingsSubscription = _userBookingsRef.onValue.listen((event) {
+      final List<Map<String, dynamic>> jobsList = [];
+
+      if (event.snapshot.exists && event.snapshot.value is Map) {
+        final data = event.snapshot.value as Map<dynamic, dynamic>;
         data.forEach((key, value) {
           if (value is Map) {
             final jobData = Map<String, dynamic>.from(value);
@@ -39,9 +55,18 @@ class _BookedPageState extends State<BookedPage> {
         });
       }
 
-      // Extract completed jobs
-      if (completedJobsSnapshot.exists && completedJobsSnapshot.value is Map) {
-        final data = completedJobsSnapshot.value as Map<dynamic, dynamic>;
+      setState(() {
+        _bookJobsList = jobsList;
+        _updateBookedJobs(); // Merge booked and completed jobs
+      });
+    });
+
+    // Listen for changes in `job_completed`
+    _completedJobsSubscription = _completedJobsRef.onValue.listen((event) {
+      final List<Map<String, dynamic>> jobsList = [];
+
+      if (event.snapshot.exists && event.snapshot.value is Map) {
+        final data = event.snapshot.value as Map<dynamic, dynamic>;
         data.forEach((key, value) {
           if (value is Map) {
             final jobData = Map<String, dynamic>.from(value);
@@ -52,18 +77,30 @@ class _BookedPageState extends State<BookedPage> {
         });
       }
 
-      return jobsList;
-    } catch (e) {
-      print('Error fetching booked and completed jobs: $e');
-    }
-
-    return [];
+      setState(() {
+        _completedJobsList = jobsList;
+        _updateBookedJobs(); // Merge booked and completed jobs
+      });
+    });
   }
 
-  Future<void> _markJobAsCompleted(String jobId, String providerId,
-      List<Map<String, dynamic>> jobs, int index) async {
+  /// Merge `book_jobs` and `job_completed` into `_bookedJobs`
+  void _updateBookedJobs() {
+    _bookedJobs = [..._bookJobsList, ..._completedJobsList];
+    _isLoading = false; // Mark loading as done
+  }
+
+  @override
+  void dispose() {
+    // Cancel the subscriptions to avoid memory leaks
+    _bookingsSubscription?.cancel();
+    _completedJobsSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _markJobAsCompleted(
+      String jobId, String providerId, List<Map<String, dynamic>> jobs, int index) async {
     try {
-      // Get the logged-in user ID
       final String? loggedInUserId = FirebaseAuth.instance.currentUser?.uid;
       if (loggedInUserId == null) {
         print("No user logged in.");
@@ -75,71 +112,28 @@ class _BookedPageState extends State<BookedPage> {
         return;
       }
 
-      // References for book_jobs and bookedUsers
-      final DatabaseReference userJobRef = FirebaseDatabase.instance
-          .ref('userprofiles/${widget.userId}/book_jobs/$jobId');
-      final DatabaseReference bookedUserJobRef = FirebaseDatabase.instance
-          .ref('userprofiles/$providerId/bookedUsers/$jobId');
+      final DatabaseReference userJobRef =
+          FirebaseDatabase.instance.ref('userprofiles/${widget.userId}/book_jobs/$jobId');
+      final DatabaseReference bookedUserJobRef =
+          FirebaseDatabase.instance.ref('userprofiles/$providerId/bookedUsers/$jobId');
+      final DatabaseReference userCompletedJobRef =
+          FirebaseDatabase.instance.ref('userprofiles/${widget.userId}/job_completed/$jobId');
+      final DatabaseReference providerCompletedJobRef =
+          FirebaseDatabase.instance.ref('userprofiles/$providerId/job_completed/$jobId');
 
-      // References for job_completed
-      final DatabaseReference userCompletedJobRef = FirebaseDatabase.instance
-          .ref('userprofiles/${widget.userId}/job_completed/$jobId');
-      final DatabaseReference providerCompletedJobRef = FirebaseDatabase
-          .instance
-          .ref('userprofiles/$providerId/job_completed/$jobId');
-
-      // Extract job details from the local state
       final Map<String, dynamic> jobDetails = jobs[index];
-      final String jobTitle = jobDetails['jobTitle'] ?? 'Unknown Title';
-      final String fullName = jobDetails['fullName'] ?? 'Unknown User';
-      final String providerName =
-          jobDetails['providerName'] ?? 'Unknown Provider';
-      final String address = jobDetails['address'] ?? 'No Address';
-      final String contactNumber = jobDetails['contactNumber'] ?? 'No Contact';
-      final String experience = jobDetails['experience'] ?? 'No Experience';
-      final String expertise = jobDetails['expertise'] ?? 'No Expertise';
-      final String selectedSchedule =
-          jobDetails['selected_schedule'] ?? 'No Schedule';
-      final String userEmail = jobDetails['userEmail'] ?? 'No Email';
-      final String userId = widget.userId;
-
-      // Combine data to save in job_completed
-      final Map<String, dynamic> completedJobData = {
-        'id': jobId,
-        'jobTitle': jobTitle,
-        'fullName': fullName,
-        'providerName': providerName,
-        'address': address,
-        'contactNumber': contactNumber,
-        'experience': experience,
-        'expertise': expertise,
-        'selected_schedule': selectedSchedule,
+      final completedJobData = {
+        ...jobDetails,
         'status': 'Completed',
         'timestamp': DateTime.now().toIso8601String(),
-        'userEmail': userEmail,
-        'userId': userId,
-        'providerId': providerId,
       };
 
-      // Perform the update
       await Future.wait([
-        // Save the completed job data for the user
         userCompletedJobRef.set(completedJobData),
-
-        // Save the completed job data for the provider
         providerCompletedJobRef.set(completedJobData),
-
-        // Delete the data from book_jobs
         userJobRef.remove(),
-
-        // Delete the data from bookedUsers
         bookedUserJobRef.remove(),
       ]);
-
-      // Update the local state to reflect the change
-      setState(() {
-        jobs[index]['status'] = 'Completed';
-      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -147,11 +141,7 @@ class _BookedPageState extends State<BookedPage> {
           backgroundColor: Colors.green,
         ),
       );
-
-      print(
-          'Job moved to job_completed for user and provider and removed from original nodes.');
     } catch (e) {
-      print('Error marking job as completed: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Failed to mark job as completed.'),
@@ -305,159 +295,149 @@ class _BookedPageState extends State<BookedPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _fetchBookedJobs(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return const Center(
-              child: Text('Failed to load booked jobs.'),
-            );
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(
-              child: Text(
-                'No booked jobs available.',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-            );
-          } else {
-            final bookedJobs = snapshot.data!;
-            return ListView.builder(
-                itemCount: bookedJobs.length,
-                padding: const EdgeInsets.all(12),
-                itemBuilder: (context, index) {
-                  final job = bookedJobs[index];
-                  final jobStatus = job['isCompleted'] == true
-                      ? 'Completed'
-                      : (job['status'] ?? 'Pending');
-                  final statusColor = jobStatus == 'Completed'
-                      ? Colors.green
-                      : jobStatus == 'Ongoing'
-                          ? Colors.orange
-                          : Colors.redAccent;
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _bookedJobs.isEmpty
+              ? const Center(
+                  child: Text(
+                    'No booked jobs available.',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: _bookedJobs.length,
+                  padding: const EdgeInsets.all(12),
+                  itemBuilder: (context, index) {
+                    final job = _bookedJobs[index];
+                    final jobStatus = job['isCompleted'] == true
+                        ? 'Completed'
+                        : (job['status'] ?? 'Pending');
+                    final statusColor = jobStatus == 'Completed'
+                        ? Colors.green
+                        : jobStatus == 'Ongoing'
+                            ? Colors.orange
+                            : Colors.redAccent;
 
-                  return Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 4,
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  job['jobTitle'] ?? 'No Title',
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blueAccent,
+                    return Card(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    job['jobTitle'] ?? 'No Title',
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.blueAccent,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: statusColor.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  jobStatus,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: statusColor,
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: statusColor.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    jobStatus,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: statusColor,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              const Icon(Icons.description,
-                                  size: 18, color: Colors.blue),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  job['about'] ?? 'No Description Available',
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Icon(Icons.description,
+                                    size: 18, color: Colors.blue),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    job['about'] ?? 'No Description Available',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.blueGrey,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Icon(Icons.schedule, size: 18, color: Colors.blue),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Scheduled: ${_formatDate(job['selected_schedule'])}',
                                   style: const TextStyle(
                                     fontSize: 14,
                                     color: Colors.blueGrey,
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              const Icon(Icons.schedule,
-                                  size: 18, color: Colors.blue),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Scheduled: ${_formatDate(job['selected_schedule'])}',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.blueGrey,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              if (jobStatus == 'Ongoing')
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                if (jobStatus == 'Ongoing')
+                                  Flexible(
+                                    child: ElevatedButton.icon(
+                                      onPressed: () async {
+                                        final jobId = job['jobId'] ?? '';
+                                        final providerId = job['providerId'] ?? '';
+                                        await _markJobAsCompleted(
+                                            jobId, providerId, _bookedJobs, index);
+                                      },
+                                      icon: const Icon(Icons.check_circle_outline),
+                                      label: const Text('Mark Completed'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                const SizedBox(width: 8),
                                 Flexible(
                                   child: ElevatedButton.icon(
-                                    onPressed: () async {
-                                      final jobId = job['jobId'] ?? ''; // Get the jobId
-                                      final providerId = job['providerId'] ?? '';
-                                      await _markJobAsCompleted(jobId, providerId, bookedJobs, index);
-                                    },
-                                    icon: const Icon(Icons.check_circle_outline),
-                                    label: const Text('Mark Completed'),
+                                    onPressed: job['isCompleted']
+                                        ? () {
+                                            _showFeedbackDialog(
+                                                context, job['providerId'] ?? '');
+                                          }
+                                        : null,
+                                    icon: const Icon(Icons.rate_review),
+                                    label: const Text('Review & Feedback'),
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.green,
+                                      backgroundColor: job['isCompleted']
+                                          ? Colors.blueAccent
+                                          : Colors.grey,
                                       foregroundColor: Colors.white,
                                     ),
                                   ),
                                 ),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: ElevatedButton.icon(
-                                  onPressed: job['isCompleted']
-                                      ? () {
-                                          _showFeedbackDialog(context, job['providerId'] ?? '');
-                                        }
-                                      : null,
-                                  icon: const Icon(Icons.rate_review),
-                                  label: const Text('Review & Feedback'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor:
-                                        job['isCompleted'] ? Colors.blueAccent : Colors.grey,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                });
-          }
-        },
-      ),
+                    );
+                  }),
     );
   }
 
@@ -469,8 +449,14 @@ class _BookedPageState extends State<BookedPage> {
       final String year = parsedDate.year.toString();
       final String month = parsedDate.month.toString().padLeft(2, '0');
       final String day = parsedDate.day.toString().padLeft(2, '0');
+      
+      // Format hours and minutes for 12-hour clock
+      final int hour = parsedDate.hour % 12 == 0 ? 12 : parsedDate.hour % 12;
+      final String minute = parsedDate.minute.toString().padLeft(2, '0');
+      final String period = parsedDate.hour >= 12 ? 'PM' : 'AM';
 
-      return '$year-$month-$day';
+      // Return formatted string with date and time
+      return '$year-$month-$day $hour:$minute $period'; // e.g., 2024-12-24 03:30 PM
     } catch (e) {
       print('Error formatting date: $e');
       return 'Invalid Date';
